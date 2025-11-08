@@ -1,0 +1,27 @@
+:root {
+  /* 🎨 Color Palette */
+  --primary-color: #4f46e5; /* Indigo */
+  --secondary-color: #6366f1;
+  --background-color: #f9fafb;
+  --text-color: #111827;
+  --border-color: #e5e7eb;
+  --input-bg: #ffffff;
+  --error-color: #dc2626;
+
+  /* 🧭 Spacing & Radius */
+  --border-radius: 8px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+
+  /* 🅰️ Typography */
+  --font-family: "Poppins", sans-serif;
+  --font-size-sm: 0.9rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.5rem;
+
+  /* ✨ Effects */
+  --transition: all 0.3s ease;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}

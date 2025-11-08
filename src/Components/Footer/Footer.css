@@ -1,0 +1,10 @@
+.footer-container {
+  width: 100%;
+  background-color: #ffffff; /* white background as requested */
+  /* removed border-top to eliminate horizontal separator line */
+  color: #475569;
+  text-align: center;
+  padding: 14px 20px;
+  font-size: 0.85rem;
+  position: relative;
+}

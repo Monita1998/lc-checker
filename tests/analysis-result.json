@@ -1,0 +1,162 @@
+{
+  "sbom": {
+    "spdxVersion": "SPDX-2.3",
+    "dataLicense": "CC0-1.0",
+    "SPDXID": "SPDXRef-DOCUMENT",
+    "name": "SBOM-for-extracted-sample",
+    "documentNamespace": "https://example.org/spdxdocs/extracted-sample-1762590413064",
+    "creationInfo": {
+      "created": "2025-11-08T08:26:53.064Z",
+      "creators": [
+        "Tool: license-checker-sbomGenerator"
+      ]
+    },
+    "packages": [
+      {
+        "SPDXID": "SPDXRef-Package-lodash-4.17.21",
+        "name": "lodash",
+        "versionInfo": "4.17.21",
+        "downloadLocation": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
+        "licenseConcluded": "MIT",
+        "licenseDeclared": "MIT",
+        "copyrightText": "NOASSERTION",
+        "description": "",
+        "externalRefs": [
+          {
+            "referenceCategory": "PACKAGE-MANAGER",
+            "referenceType": "purl",
+            "referenceLocator": "pkg:npm/lodash@4.17.21"
+          }
+        ]
+      },
+      {
+        "SPDXID": "SPDXRef-Package-express-4.18.2",
+        "name": "express",
+        "versionInfo": "4.18.2",
+        "downloadLocation": "https://registry.npmjs.org/express/-/express-4.18.2.tgz",
+        "licenseConcluded": "MIT",
+        "licenseDeclared": "MIT",
+        "copyrightText": "NOASSERTION",
+        "description": "",
+        "externalRefs": [
+          {
+            "referenceCategory": "PACKAGE-MANAGER",
+            "referenceType": "purl",
+            "referenceLocator": "pkg:npm/express@4.18.2"
+          }
+        ]
+      }
+    ]
+  },
+  "licenseCompliance": {
+    "summary": {
+      "totalPackages": 2,
+      "uniqueLicenses": 1,
+      "licenseCounts": {
+        "MIT": 2
+      },
+      "licenseDistribution": [
+        {
+          "license": "MIT",
+          "count": 2,
+          "percentage": 100
+        }
+      ]
+    },
+    "violations": [],
+    "warnings": [],
+    "riskDistribution": {
+      "distribution": {
+        "PERMISSIVE": 2
+      },
+      "percentages": {
+        "PERMISSIVE": 100
+      },
+      "total": 2
+    },
+    "qualityMetrics": {
+      "excellent": 2,
+      "good": 0,
+      "fair": 0,
+      "poor": 0,
+      "qualityScore": 100
+    },
+    "licenseUsage": {
+      "mostUsedLicenses": [
+        {
+          "license": "MIT",
+          "count": 2,
+          "percentage": 100
+        }
+      ],
+      "riskProfile": {
+        "permissivePercentage": 100,
+        "copyleftPercentage": 0,
+        "unknownPercentage": 0
+      }
+    }
+  },
+  "securityVulnerabilities": {
+    "summary": {
+      "totalVulnerabilities": 2,
+      "bySeverity": {
+        "UNKNOWN": 2
+      }
+    },
+    "vulnerabilities": [
+      {
+        "package": "express",
+        "version": "4.18.2",
+        "osvEntries": [
+          {
+            "id": "GHSA-qw6h-vgh9-j6wx",
+            "modified": "2024-11-18T16:27:11Z"
+          },
+          {
+            "id": "GHSA-rv95-896h-c2vc",
+            "modified": "2025-07-21T16:57:31Z"
+          }
+        ]
+      }
+    ],
+    "affectedPackages": [
+      "express"
+    ]
+  },
+  "riskAssessment": {
+    "overallRiskScore": 20,
+    "detailedRisks": [
+      {
+        "package": "express",
+        "count": 2,
+        "details": [
+          {
+            "id": "GHSA-qw6h-vgh9-j6wx",
+            "modified": "2024-11-18T16:27:11Z"
+          },
+          {
+            "id": "GHSA-rv95-896h-c2vc",
+            "modified": "2025-07-21T16:57:31Z"
+          }
+        ]
+      }
+    ]
+  },
+  "reports": {
+    "executiveSummary": {
+      "projectHealth": "UNKNOWN",
+      "topRisks": [],
+      "quickActions": [],
+      "summaryMetrics": {
+        "overallRiskScore": 0,
+        "totalRisks": 0,
+        "highPriority": 0,
+        "complianceStatus": "UNKNOWN"
+      }
+    }
+  },
+  "metadata": {
+    "analysisTimestamp": "2025-11-08T08:26:53.648Z",
+    "generator": "sbomGenerator (no-docker)"
+  }
+}

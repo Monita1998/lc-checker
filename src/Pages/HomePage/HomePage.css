@@ -1,0 +1,55 @@
+.home-container {
+  display: flex;
+  height: 100vh; /* Full viewport height */
+  width: 100%;
+}
+
+/* Sidebar styling - 20% */
+.sidebar {
+  width: 20%;
+  background-color: #0f172a;
+  color: white;
+}
+
+/* Main content - 80% */
+.main-content {
+  width: 80%;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; /* Keeps footer at bottom */
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.content-wrapper {
+  flex: 1;
+  overflow-y: auto;
+}
+.home-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+
+.content-section.empty-state {
+  text-align: center;
+  margin-top: 10%;
+  color: #555;
+}
+
+.upload-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.upload-icon {
+  font-size: 40px;
+  color: #007bff;
+}

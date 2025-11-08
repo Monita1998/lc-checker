@@ -1,0 +1,594 @@
+/* --- Layout Container --- */
+.project-container {
+  display: flex;
+  width: 100%;
+  height: 100vh; /* match HomePage full viewport layout */
+  background-color: #ffffff;
+}
+
+/* Sidebar as normal column (match Home page) */
+.sidebar {
+  width: 20%;
+  background-color: #0f172a;
+  color: white;
+}
+
+/* Main Content matches Home page layout */
+.main-content {
+  width: 80%;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; /* keep footer at bottom like HomePage */
+  box-sizing: border-box;
+  padding: 20px;
+}
+
+/* --- Projects Content --- */
+.projects-content {
+  flex: 1 1 auto;
+  padding: 40px;
+  color: #0f172a;
+  background-color: #ffffff;
+  min-height: 0; /* allow children to handle their own scrolling */
+  overflow-y: auto;        /* allow vertical scroll for the main projects area */
+  padding-bottom: 20px; /* smaller bottom padding since footer is in-flow */
+}
+
+/* --- Empty State --- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;        /* ✅ Creates visual balance */
+  text-align: center;
+  gap: 20px;
+  color: #0f172a;
+}
+
+.empty-state h2 {
+  color: #0f172a;
+  font-size: 1.8rem;
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  color: #475569;
+  font-size: 1rem;
+  max-width: 600px;
+}
+
+/* --- Projects Layout --- */
+.projects-layout {
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  height: 100%;
+  min-height: 0;
+}
+
+.projects-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px; /* bring header up */
+}
+
+.projects-header h2,
+.projects-header h3 {
+  color: #0f172a;
+}
+
+/* --- Add Project Button --- */
+.add-project-btn {
+  background-color: #238636;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.add-project-btn:hover {
+  background-color: #2ea043;
+}
+
+/* --- Projects Grid --- */
+.projects-grid {
+  /* Keep a simple wrapper for dropdown + details */
+  display: block;
+}
+
+/* --- Project Cards --- */
+.projects-list h3 {
+  color: #0f172a;
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+}
+
+.projects-list-fullwidth {
+  width: 100%;
+}
+
+.projects-list-fullwidth label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #0f172a;
+}
+
+.projects-list-fullwidth select {
+  font-size: 0.95rem;
+  padding: 8px; /* slightly smaller select padding */
+}
+
+.project-details-panel.fullwidth {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 12px; /* more compact padding */
+  max-height: calc(100vh - 260px); /* allow for footer/header while keeping compact */
+  overflow-y: auto;
+}
+
+/* --- Project Card Styles --- */
+.project-card {
+  background-color: #94a3b8;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 15px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: #0f172a;
+  box-sizing: border-box;
+}
+
+.project-card:hover {
+  border-color: #94a3b8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.project-card.active {
+  border-color: #58a6ff;
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(88, 166, 255, 0.3);
+}
+
+/* --- Card Content --- */
+.project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.project-name {
+  font-size: 1rem;
+  margin: 0;
+  flex: 1;
+  margin-right: 10px;
+  font-weight: 600;
+  color: #0f172a;
+  transition: color 0.3s ease;
+}
+
+.project-card.active .project-name {
+  color: #ffffff !important;
+}
+
+.project-details {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: #475569;
+  transition: color 0.3s ease;
+}
+
+.project-card.active .project-details {
+  color: #cbd5e1 !important;
+}
+
+.project-size,
+.project-date {
+  color: #475569;
+  transition: color 0.3s ease;
+}
+
+.project-card.active .project-size,
+.project-card.active .project-date {
+  color: #cbd5e1 !important;
+}
+
+/* --- Status System --- */
+.status-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.status-not-scanned { background-color: #6b7280 !important; }
+.status-scanning { background-color: #f59e0b !important; color: #000000 !important; }
+.status-completed { background-color: #10b981 !important; }
+.status-failed { background-color: #ef4444 !important; }
+.status-uploading { background-color: #3b82f6 !important; }
+.status-unknown { background-color: #6b7280; }
+
+.project-card.active .status-badge {
+  color: #ffffff !important;
+}
+.project-card.active .status-scanning {
+  color: #000000 !important;
+}
+
+/* --- Error Tooltip --- */
+.error-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.error-tooltip:hover .error-message {
+  visibility: visible;
+  opacity: 1;
+}
+
+.error-icon {
+  font-size: 14px;
+  cursor: help;
+}
+
+.error-message {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: #1f2937;
+  color: #ffffff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  width: 200px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  margin-top: 5px;
+}
+
+.error-message::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 10px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: transparent transparent #1f2937 transparent;
+}
+
+/* --- Project Details Panel --- */
+.project-details-panel {
+  background-color: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #ffffff;
+  height: auto;
+  min-height: 220px; /* reduced min-height for compact layout */
+  /* allow internal vertical scrolling when content is tall to avoid shrinking the layout */
+  padding: 12px; /* compact padding */
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.details-content h3 {
+  color: #ffffff;
+  margin-bottom: 12px;
+  font-size: 1.05rem;
+}
+
+.project-details-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between; /* push badge to right */
+}
+.project-heading-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+@media (max-width: 900px) {
+  .project-details-heading { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .project-heading-badge { margin-left: 0; }
+}
+
+/* three-col retained for backward compatibility */
+.details-content.three-col .details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 240px; /* left, center, right action column */
+  gap: 12px 20px;
+  align-items: start;
+}
+
+.details-grid.two-col {
+  display: grid;
+  grid-template-columns: 1fr; /* single column stack */
+  gap: 10px 0; /* vertical spacing between stacked items */
+  align-items: start;
+}
+
+.details-content .col {
+  min-width: 0;
+}
+
+.details-content .col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px; /* more breathing room between right-column items */
+  align-items: flex-end;
+}
+
+/* Make right column align start so it doesn't leave large empty space */
+.details-content .col-right {
+  align-items: flex-start;
+}
+
+.status-desc {
+  margin-top: 6px;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  max-width: 48ch;
+}
+
+.status-inline .status-badge {
+  transform: none;
+}
+
+.status-short {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+/* Inline long status description next to badge */
+.status-desc-inline {
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  margin-left: 8px;
+  max-width: 60ch;
+}
+
+.action-buttons.left {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* New action row with left/center/right slots */
+.action-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.action-left { justify-self: start; }
+.action-center { justify-self: center; }
+.action-right { justify-self: end; }
+
+.action-buttons-right-wrapper {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.action-buttons.right {
+  display: flex;
+  flex-direction: row; /* place buttons horizontally */
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-start; /* align buttons to left inside right column */
+  flex-wrap: wrap;
+}
+
+/* Right-column detail items: remove heavy borders and add spacing */
+.details-content .col-right .detail-item {
+  border-bottom: none;
+  padding: 8px 0;
+}
+
+/* Left column buttons (below Upload Date) */
+.action-buttons.left {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.col-right .delete-btn-large {
+  width: auto;
+  padding: 8px 14px;
+}
+
+/* Responsive: stack columns on small screens */
+@media (max-width: 900px) {
+  .details-content.three-col .details-grid,
+  .details-grid.two-col {
+    grid-template-columns: 1fr;
+  }
+  .details-content .col-right {
+    align-items: stretch;
+  }
+  .action-row { grid-template-columns: 1fr; }
+  footer {
+    left: 0;
+    width: 100%;
+  }
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0; /* slightly increased for readability */
+  border-bottom: 1px solid #334155;
+  color: #e2e8f0;
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-item label {
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 0.85rem; /* slightly smaller */
+}
+
+.detail-item span {
+  color: #ffffff;
+  font-size: 0.9rem; /* slightly smaller */
+}
+
+.no-selection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #94a3b8;
+}
+
+/* --- Action Buttons --- */
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.analyze-btn,
+.delete-btn-large {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  color: #ffffff;
+}
+
+/* Projects page: make download button specific so other page styles don't override it */
+.project-details-panel .action-buttons .download-btn,
+.action-left .download-btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  background-color: #58a6ff; /* Primary blue for this page */
+  text-align: center;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  color: #ffffff;
+}
+
+.project-details-panel .action-buttons .download-btn:hover {
+  background-color: #1f6feb;
+  transform: translateY(-1px);
+}
+
+/* Hover and focus styles targeting both scoped selectors used on this page */
+.project-details-panel .download-btn:hover,
+.action-left .download-btn:hover {
+  background-color: #1f6feb; /* slightly darker blue on hover */
+}
+
+.project-details-panel .download-btn:focus-visible,
+.action-left .download-btn:focus-visible {
+  outline: 3px solid rgba(88,166,255,0.25);
+  outline-offset: 2px;
+}
+
+.analyze-btn { background-color: #238636; }
+.analyze-btn:hover { background-color: #2ea043; }
+.analyze-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.delete-btn-large {
+  background-color: #dc2626;
+  width: auto;
+  margin-top: 0;
+  padding: 8px 14px;
+}
+.delete-btn-large:hover { background-color: #b91c1c; }
+.delete-btn-large:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Right-column status badge tweaks */
+.details-content .col-right .status-container {
+  justify-content: flex-end;
+}
+
+.status-badge {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  border-radius: 12px;
+  display: inline-block;
+}
+
+/* When badge follows file name, give a small left margin */
+.detail-item .status-container {
+  margin-left: 10px;
+}
+
+/* Make 'scanned' (completed) status look distinct */
+.status-completed {
+  background-color: #16a34a !important; /* slightly brighter green */
+  box-shadow: 0 2px 6px rgba(22,163,74,0.18);
+}
+
+/* Responsive: stack buttons under right column on small screens */
+@media (max-width: 900px) {
+  .action-buttons.right {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* --- Scrollbar Styling --- */
+.projects-content::-webkit-scrollbar {
+  width: 6px;
+}
+.projects-content::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.projects-content::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Footer styling is provided by the shared Footer component CSS (Footer.css) */
+
+/* Align status in left column */
+.details-content .col-left .status-container {
+  justify-content: flex-start;
+}
+
+/* --- Smooth Scroll --- */
+html, body {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
