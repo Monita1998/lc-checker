@@ -8,8 +8,16 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow-x: visible;
+  overflow-y: visible; /* allow the page to scroll instead of internal clipping */
+}
+
+/* Ensure the Results page can scroll even if other pages globally hide body scrolling
+   (some auth pages set html,body,#root { overflow: hidden }). We override that here
+   so long result lists and charts are reachable. */
+html, body, #root {
+  overflow-y: auto !important;
+  height: auto !important;
 }
 
 /* --- Header --- */
@@ -102,6 +110,10 @@
   font-size: 0.95rem;
   color: #0f172a;
   font-weight: 700; /* make icon bolder */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
 }
 .small-download-btn:hover {
   background-color: #f1f5f9;
@@ -111,15 +123,24 @@
   outline-offset: 2px;
 }
 
+/* Toggle view buttons (Charts / JSON) */
+.toggle-view-btn { margin-right: 8px; }
+.toggle-view-btn.active { background-color: #ecfdf5; border-color: #bbf7d0; color: #065f46; }
+
+@media (max-width: 640px) {
+  /* Make buttons smaller on mobile so they fit on one line */
+  .small-download-btn { padding: 6px 6px; min-width: 44px; font-size: 0.9rem; }
+  .detail-header { gap: 8px; }
+}
 /* JSON view */
 .json-view-section {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 12px;
-  overflow: hidden;
-  /* fixed height so raw JSON scrolls independently */
-  max-height: 420px;
+  /* allow charts to size naturally and scroll if needed */
+  overflow: visible;
+  max-height: none;
 }
 .json-view-header {
   display: flex;
@@ -143,15 +164,35 @@
 /* --- Charts --- */
 .charts-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 1.5rem; /* gap-6 equivalent */
+  grid-auto-rows: 1fr; /* make rows equal height so cards in a row match */
+  align-items: stretch; /* stretch cards to fill grid row */
+}
+
+@media (min-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr 1fr; /* md:grid-cols-2 */
+  }
 }
 .chart-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 12px;
+  min-height: 200px;
+  position: relative;
+  overflow: visible; /* allow chart overlays (gauge center) to render correctly */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
+
+/* Styles for the license quality list (left numeric score, right label) */
+.quality-list { display:flex; flex-direction:column; gap:12px; padding: 6px 4px; }
+.quality-item { display:flex; justify-content:space-between; align-items:center; }
+.quality-label { color: #374151; font-size: 0.95rem; }
+.quality-score { font-size: 20px; font-weight: 700; color: #0f172a; min-width:56px; text-align:right; }
 .chart-title { margin: 0 0 8px 0; font-size: 1.05rem; }
 .legend { color: #374151; margin-bottom: 8px; }
 .stat-row { display:flex; justify-content:space-between; margin-top:6px; font-size:0.95rem; }
@@ -175,14 +216,19 @@
 
 /* Layout: two-column with right side scrollable like HomePage */
 .results-layout {
-  display: grid;
-  grid-template-columns: 320px 1fr; /* left narrow, right flexible */
+  /* single-column layout so charts take full available width and don't overlap other panels */
+  display: block;
   gap: 18px;
-  align-items: start;
   min-height: 0;
 }
 
 .results-sidebar { overflow-y: visible; }
+
+.results-list-compact .compact-item.selected { background:#eef2f7; border-radius:6px; font-weight:700 }
+
+.chart-empty-state { padding:12px; background:#fff7ed; border:1px solid #fde3c7; border-radius:6px; margin-bottom:12px }
+
+.results-select-label { margin-bottom:6px }
 
 .result-details { overflow-y: auto; }
 
@@ -199,27 +245,36 @@ main.main-content {
 /* results-content should take remaining space and scroll internally */
 main.main-content > .results-content {
   flex: 1 1 auto;
-  overflow-y: auto;
+  overflow-y: visible; /* allow page scrollbar to show full charts */
 }
 
 /* ensure sidebar width accounted for — keep same spacing as other pages */
 .results-container {
   display: flex;
-  height: 100vh; /* match Home page container */
+  min-height: auto; /* let page height grow with content so browser scrollbar appears */
   width: 100%;
 }
 
 .results-container .sidebar {
-  width: 20%;
+  /* Fixed sidebar: stays visible while results content scrolls */
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 240px; /* fixed width prevents layout shift when scrolling */
   background-color: inherit; /* let Sidebar component define its look */
+  overflow-y: auto; /* allow sidebar content to scroll independently if long */
+  z-index: 50;
 }
 
 .results-container .main-content {
-  width: 80%;
+  /* Make space for the fixed sidebar */
+  margin-left: 240px;
+  width: calc(100% - 240px);
   background-color: #ffffff;
   display: flex;
   flex-direction: column;
-  justify-content: space-between; /* keep footer at bottom */
+  justify-content: flex-start; /* main content should flow naturally */
   padding: 20px;
   box-sizing: border-box;
 }

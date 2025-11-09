@@ -8,7 +8,7 @@ import Footer from "../../Components/Footer/FooterNew";
 import ChartsPanel from "../../Components/ResultsCharts/ChartsPanel";
 import "./ResultsPage.css";
 
-const ResultsPage = () => {
+const ResultsPageFixed = () => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedResult, setSelectedResult] = useState(null);
@@ -285,16 +285,14 @@ const ResultsPage = () => {
 
                       {/* Right-side: only the small download icon (bold) */}
                       <div className="detail-actions-right">
-                            <label htmlFor="view-select" className="json-label">View</label>
-                            <select
-                              id="view-select"
-                              value={showJsonRaw ? 'json' : 'charts'}
-                              onChange={(e) => setShowJsonRaw(e.target.value === 'json')}
-                              style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff' }}
+                            <span className="json-label">Result</span>
+                            <button
+                              className="small-download-btn"
+                              title="Toggle JSON / Charts"
+                              onClick={() => setShowJsonRaw(!showJsonRaw)}
                             >
-                              <option value="charts">Charts</option>
-                              <option value="json">JSON</option>
-                            </select>
+                              {showJsonRaw ? 'Charts' : 'JSON'}
+                            </button>
                             <button
                               className="small-download-btn"
                               title="Download JSON"
@@ -359,4 +357,4 @@ const ResultsPage = () => {
   );
 };
 
-export default ResultsPage;
+export default ResultsPageFixed;

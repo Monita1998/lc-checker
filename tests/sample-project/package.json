@@ -1,9 +1,0 @@
-{
-  "name": "sample-project",
-  "version": "0.1.0",
-  "description": "Tiny sample project for license-checker integration test",
-  "dependencies": {
-    "lodash": "^4.17.21",
-    "express": "^4.18.2"
-  }
-}
