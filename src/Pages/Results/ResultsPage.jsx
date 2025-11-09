@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from 'react-router-dom';
-import { collection, getDocs, query, orderBy, limit, doc, getDoc, deleteDoc, where } from "firebase/firestore";
-import { db } from "../../firebase";
+import { collection, query, orderBy, limit, doc, getDoc, deleteDoc, where, onSnapshot } from "firebase/firestore";
+import { auth, db } from "../../firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import Sidebar from "../../Components/SideBar/Sidebar";
 import Footer from "../../Components/Footer/FooterNew";
 import "./ResultsPage.css";
@@ -21,87 +22,79 @@ const ResultsPage = () => {
   // fetchResultsWithProjectNames is implemented inside the useEffect below
 
   useEffect(() => {
-    const fetchResultsWithProjectNames = async () => {
-      try {
-        // Fetch results
-        const resultsQuery = query(
-          collection(db, "results"), 
+    // Create and manage a snapshot listener which re-attaches when auth state changes
+    let unsubscribeSnapshot = null;
+
+    const attachListener = (user) => {
+      if (unsubscribeSnapshot) {
+        try { unsubscribeSnapshot(); } catch (e) { /* ignore */ }
+        unsubscribeSnapshot = null;
+      }
+
+      let resultsQuery;
+      if (user && user.uid) {
+        resultsQuery = query(
+          collection(db, "results"),
+          where("uid", "==", user.uid),
+          orderBy("analyzedAt", "desc")
+        );
+      } else {
+        resultsQuery = query(
+          collection(db, "results"),
           orderBy("analyzedAt", "desc"),
           limit(10)
         );
-        const resultsSnapshot = await getDocs(resultsQuery);
-        
-        const resultsData = [];
-        
-        for (const docSnap of resultsSnapshot.docs) {
-          const resultData = {
-            id: docSnap.id,
-            ...docSnap.data()
-          };
-
-          // Try to get project name from uploads collection
-          if (resultData.uploadId) {
-            try {
-              const uploadDoc = await getDoc(doc(db, "uploads", resultData.uploadId));
-              if (uploadDoc.exists()) {
-                resultData.projectName = uploadDoc.data().originalName || "Unknown Project";
-              }
-            } catch (error) {
-              console.log("Could not fetch project name:", error);
-            }
-          }
-
-          // If no uploadId, try to extract from metadata or use filename
-          if (!resultData.projectName) {
-            resultData.projectName = resultData.metadata?.projectName || 
-                                   resultData.originalName || 
-                                   "Project Analysis";
-          }
-
-          resultsData.push(resultData);
-        }
-        
-        // If Results page was opened with a projectId (from Projects -> View), try to select that result
-        if (desiredProjectId) {
-          let matched = resultsData.find(r => r.uploadId === desiredProjectId);
-
-          // If not found in recent results, try a targeted query for that uploadId
-          if (!matched) {
-            try {
-              const targetedQ = query(
-                collection(db, "results"),
-                where("uploadId", "==", desiredProjectId),
-                orderBy("analyzedAt", "desc"),
-                limit(1)
-              );
-              const targetedSnap = await getDocs(targetedQ);
-              if (!targetedSnap.empty) {
-                const docSnap = targetedSnap.docs[0];
-                matched = { id: docSnap.id, ...docSnap.data() };
-                // prepend to results list so UI shows it first
-                resultsData.unshift(matched);
-              }
-            } catch (err) {
-              console.warn("Could not perform targeted result query:", err);
-            }
-          }
-
-          setResults(resultsData);
-          setSelectedResult(matched || resultsData[0] || null);
-        } else {
-          setResults(resultsData);
-          if (resultsData.length > 0) {
-            setSelectedResult(resultsData[0]);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching results:", error);
-      } finally {
-        setLoading(false);
       }
+
+      unsubscribeSnapshot = onSnapshot(resultsQuery, async (snapshot) => {
+        try {
+          const resultsData = [];
+          for (const docSnap of snapshot.docs) {
+            const resultData = { id: docSnap.id, ...docSnap.data() };
+            if (resultData.uploadId) {
+              try {
+                const uploadDoc = await getDoc(doc(db, "uploads", resultData.uploadId));
+                if (uploadDoc.exists()) {
+                  resultData.projectName = uploadDoc.data().originalName || "Unknown Project";
+                }
+              } catch (e) {
+                // ignore upload fetch errors
+              }
+            }
+            if (!resultData.projectName) {
+              resultData.projectName = resultData.metadata?.projectName || resultData.originalName || "Project Analysis";
+            }
+            resultsData.push(resultData);
+          }
+
+          setResults(resultsData);
+          if (desiredProjectId) {
+            let matched = resultsData.find(r => r.uploadId === desiredProjectId) || null;
+            setSelectedResult(matched || resultsData[0] || null);
+          } else {
+            setSelectedResult(resultsData[0] || null);
+          }
+        } catch (err) {
+          console.error('Error handling snapshot:', err);
+        } finally {
+          setLoading(false);
+        }
+      }, (err) => {
+        console.error('Realtime results listener error:', err);
+        setLoading(false);
+      });
     };
 
-    fetchResultsWithProjectNames();
+    // Attach initial listener and also re-attach on auth changes
+    attachListener(auth.currentUser);
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      attachListener(user);
+    });
+
+    return () => {
+      try { if (unsubscribeSnapshot) unsubscribeSnapshot(); } catch(e) {}
+      try { unsubscribeAuth(); } catch(e) {}
+    };
   }, [desiredProjectId]);
 
   const formatDate = (timestamp) => {
