@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from 'react-router-dom';
-import { collection, query, orderBy, limit, doc, getDoc, deleteDoc, where, onSnapshot } from "firebase/firestore";
+import { collection, query, orderBy, limit, doc, getDoc, getDocs, deleteDoc, where, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import Sidebar from "../../Components/SideBar/Sidebar";
@@ -65,6 +65,29 @@ const ResultsPage = () => {
               resultData.projectName = resultData.metadata?.projectName || resultData.originalName || "Project Analysis";
             }
             resultsData.push(resultData);
+          }
+
+          // If no results were returned for the user, try to recover by looking up uploads the user owns
+          if (resultsData.length === 0 && user && user.uid) {
+            try {
+              const uploadsQ = query(collection(db, 'uploads'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(20));
+              const uploadsSnap = await getDocs(uploadsQ);
+              for (const upSnap of uploadsSnap.docs) {
+                const uploadId = upSnap.id;
+                try {
+                  const resultDoc = await getDoc(doc(db, 'results', uploadId));
+                  if (resultDoc.exists()) {
+                    const rd = { id: resultDoc.id, ...resultDoc.data() };
+                    rd.projectName = upSnap.data().originalName || rd.projectName || 'Project Analysis';
+                    resultsData.push(rd);
+                  }
+                } catch (e) {
+                  // ignore per-upload fetch errors
+                }
+              }
+            } catch (e) {
+              console.warn('Fallback fetch of uploads failed:', e);
+            }
           }
 
           setResults(resultsData);
