@@ -2,7 +2,6 @@ const path = require('path');
 const axios = require('axios');
 const {generateSBOM} = require('./sbomGenerator');
 
-console.log('[analyzers] loaded: SCAPlatformAnalyzerImpl.js');
 console.log('🎯 analyzer loaded: analyzers/SCAPlatformAnalyzerImpl.js');
 
 /**
@@ -126,7 +125,7 @@ class SCAPlatformAnalyzer {
       },
     };
 
-    return {
+    const result = {
       sbom,
       licenseCompliance,
       securityVulnerabilities,
@@ -137,6 +136,16 @@ class SCAPlatformAnalyzer {
         generator: 'sbomGenerator (no-docker)',
       },
     };
+
+    try {
+      const pkgCount = (sbom && sbom.packages) ? sbom.packages.length : 'unknown';
+      console.log('🎯 analyzers/SCAPlatformAnalyzerImpl: comprehensiveAnalysis completed');
+      console.log('analyzers/SCAPlatformAnalyzerImpl: packages=', pkgCount);
+    } catch (e) {
+      // ignore
+    }
+
+    return result;
   }
 
   // --- Helper methods ported from the enhanced analyzer ---

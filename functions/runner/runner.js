@@ -67,7 +67,7 @@ async function runAnalysisForUpload(bucket, objectPath, uploadId, options = {}) 
     // (runner.js is in functions/runner, so ../analyze points to functions/analyze.js)
     // Use a dynamic require so missing module doesn't crash the whole runner.
     // eslint-disable-next-line global-require
-    const LocalAnalyzer = require('../analyze');
+    const LocalAnalyzer = require('../analyzers/analyze');
     if (LocalAnalyzer) {
       console.log('runner: local analyze.js found; instantiating analyzer');
       const analyzerInstance = new LocalAnalyzer(extractDir);

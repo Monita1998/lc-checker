@@ -8,9 +8,10 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const {unzipFile} = require('./utils/unzipper');
-// Load the analyzer through a feature-flagged wrapper. Set
-// USE_ENHANCED_ANALYZER='true' to enable the full enhanced analyzer.
-const SCAPlatformAnalyzer = require('./analyzers/EnhancedSCAPlatform');
+
+// Use the enhanced unified analyzer with built-in SBOM generation
+// This analyzer provides: license analysis, security scanning, and SPDX 2.3 SBOM
+const SCAPlatformAnalyzer = require('./analyzers/analyze');
 
 // Initialize Admin SDK
 initializeApp();
@@ -104,14 +105,28 @@ exports.analyzeOnUpload = onDocumentUpdated({
           const reportUploadPath = `reports/${reportFileName}`;
           await bucket.upload(reportPath, {
             destination: reportUploadPath,
-            metadata: {contentType: 'application/json'},
+            metadata: {
+              contentType: 'application/json',
+              metadata: {
+                firebaseStorageDownloadTokens: require('uuid').v4(),
+              },
+            },
           });
           console.log('✅ Uploaded report to', reportUploadPath);
+
+          // Make file publicly readable and get public URL
+          const reportFile = bucket.file(reportUploadPath);
+          await reportFile.makePublic();
+          // Construct public URL
+          const reportUrl = `https://storage.googleapis.com/${bucket.name}/${reportUploadPath}`;
+          console.log('✅ Generated public URL for report (Cloud Run path)');
 
           await db.collection('results').doc(uploadId).set({
             uid: afterData.uid,
             uploadId,
             reportPath: reportUploadPath,
+            reportUrl: reportUrl, // Signed URL for download
+            data: analysisResults, // Full JSON data for in-app viewing
             analyzedAt: FieldValue.serverTimestamp(),
             status: 'completed',
             summary: analysisResults.reports?.executiveSummary || 'Analysis completed',
@@ -128,6 +143,7 @@ exports.analyzeOnUpload = onDocumentUpdated({
               packagesFound: (analysisResults.sbom?.packages || []).length,
               riskLevel: analysisResults.riskAssessment?.overallRiskScore || null,
               reportPath: reportUploadPath,
+              reportUrl: reportUrl, // Add download URL
             },
           });
 
@@ -161,100 +177,109 @@ exports.analyzeOnUpload = onDocumentUpdated({
       await unzipFile(tempZipPath, extractPath);
       console.log('📂 Extracted to', extractPath);
 
-      // Validate extracted contents: only allow top-level node_modules, package.json,
-      // and package-lock.json.
-      // If the archive contains a single root folder (common), inspect its contents instead.
+      // Validate and locate the project root to analyze
+      // Expected files: package.json, package-lock.json (or yarn.lock), node_modules/
+      // If the archive contains a single root folder (common), inspect its contents
+      let rootToCheck = extractPath;
+      const warnings = [];
       try {
-        const allowed = new Set(['node_modules', 'package.json', 'package-lock.json']);
-        let rootToCheck = extractPath;
         const topLevel = fs.readdirSync(rootToCheck);
         if (topLevel.length === 1) {
           const single = topLevel[0];
           const singlePath = path.join(rootToCheck, single);
           if (fs.existsSync(singlePath) && fs.statSync(singlePath).isDirectory()) {
             rootToCheck = singlePath;
+            console.log(`📁 Single root folder detected, using: ${single}`);
           }
         }
 
         const entries = fs.readdirSync(rootToCheck);
-
-        // Detailed logging: list each top-level entry and whether it will be
-        // used for analysis or ignored. This helps debugging why a particular
-        // uploaded archive did or did not contribute to the analysis.
         console.log('📋 Archive top-level entries:', entries);
-        const entryReasons = [];
-        entries.forEach((name) => {
-          try {
-            const p = path.join(rootToCheck, name);
-            const stat = fs.existsSync(p) ? fs.statSync(p) : null;
-            if (allowed.has(name)) {
-              let reason = '';
-              if (name === 'package.json') reason = 'dependency manifest';
-              else if (name === 'package-lock.json') reason = 'lockfile for SBOM';
-              else if (name === 'node_modules') reason = 'installed packages';
-              else reason = 'allowed entry';
-              entryReasons.push({
-                name,
-                type: stat && stat.isDirectory() ? 'dir' : 'file',
-                action: 'used',
-                reason,
-              });
-            } else {
-              entryReasons.push({
-                name,
-                type: stat && stat.isDirectory() ? 'dir' : 'file',
-                action: 'ignored',
-                reason: 'not relevant for analysis',
-              });
-            }
-          } catch (e) {
-            entryReasons.push({name, type: 'unknown', action: 'error', reason: String(e)});
-          }
-        });
-        console.log('🔍 Archive entry analysis:', JSON.stringify(entryReasons, null, 2));
 
-        const invalid = entries.filter((name) => !allowed.has(name));
+        // Check for required and recommended files
+        const requiredFiles = {
+          'package.json': {
+            exists: fs.existsSync(path.join(rootToCheck, 'package.json')),
+            description: 'Project manifest with dependency list',
+            severity: 'CRITICAL',
+          },
+          'node_modules': {
+            exists: fs.existsSync(path.join(rootToCheck, 'node_modules')),
+            description: 'Installed packages for detailed analysis',
+            severity: 'HIGH',
+          },
+          'package-lock.json': {
+            exists: fs.existsSync(path.join(rootToCheck, 'package-lock.json')) ||
+                    fs.existsSync(path.join(rootToCheck, 'yarn.lock')),
+            description: 'Lock file for exact version tracking',
+            severity: 'MEDIUM',
+          },
+        };
 
-        if (invalid.length > 0) {
-          const msg = 'Zip contains unexpected files/folders: ' + invalid.join(', ') +
-            '. Only node_modules, package.json and package-lock.json are allowed. ' +
-            'Please upload a zip with only the expected files.';
+        // Check for unexpected files (anything other than the 3 mandatory files)
+        const allowedFiles = ['package.json', 'package-lock.json', 'yarn.lock', 'node_modules'];
+        const unexpectedFiles = entries.filter((name) => !allowedFiles.includes(name));
 
-          console.warn('❌ Invalid archive contents detected:', invalid);
-
-          // Update upload doc to indicate failure and provide user-friendly message
-          try {
-            await event.data.after.ref.update({
-              status: 'invalid_zip',
-              errorMessage: msg,
-              scanFailedAt: FieldValue.serverTimestamp(),
-            });
-          } catch (uErr) {
-            console.error('Failed to update upload doc for invalid archive:', uErr);
-          }
-
-          // Cleanup temporary files and exit without running the analyzer or writing results
-          try {
-            fs.rmSync(tempZipPath, {force: true});
-          } catch (e) {
-            // ignore cleanup error
-          }
-          try {
-            fs.rmSync(extractPath, {recursive: true, force: true});
-          } catch (e) {
-            // ignore cleanup error
-          }
-
-          return null;
+        if (unexpectedFiles.length > 0) {
+          const msg = `Zip contains unexpected files/folders: ${unexpectedFiles.join(', ')}. ` +
+                      'For accurate analysis, upload only: package.json, package-lock.json, ' +
+                      'and node_modules folder.';
+          warnings.push({
+            type: 'UNEXPECTED_FILES',
+            severity: 'WARNING',
+            message: msg,
+            files: unexpectedFiles,
+          });
+          console.warn('⚠️ Unexpected files detected:', unexpectedFiles);
         }
 
-        // Log whether the extracted project contains package.json or node_modules
-        // This is useful to know if the analyzer will have data to work with.
-        const pkgExists = fs.existsSync(path.join(rootToCheck, 'package.json'));
-        const nmExists = fs.existsSync(path.join(rootToCheck, 'node_modules'));
-        console.log(`📌 package.json present: ${pkgExists}; node_modules present: ${nmExists}`);
-        if (!pkgExists && !nmExists) {
-          console.warn('⚠️ No package.json/node_modules found; analyzer may skip.');
+        // Check for missing critical files and generate warnings
+        Object.entries(requiredFiles).forEach(([fileName, fileInfo]) => {
+          if (!fileInfo.exists) {
+            const msg = `Missing ${fileName}: ${fileInfo.description}. ` +
+                        'Analysis results may be incomplete or inaccurate.';
+            warnings.push({
+              type: 'MISSING_FILE',
+              severity: fileInfo.severity,
+              message: msg,
+              file: fileName,
+            });
+            console.warn(`⚠️ ${fileInfo.severity}: ${msg}`);
+          } else {
+            console.log(`✅ Found ${fileName}`);
+          }
+        });
+
+        // Log file validation summary
+        const validationSummary = {
+          hasPackageJson: requiredFiles['package.json'].exists,
+          hasNodeModules: requiredFiles['node_modules'].exists,
+          hasLockFile: requiredFiles['package-lock.json'].exists,
+          unexpectedFilesCount: unexpectedFiles.length,
+          warningsCount: warnings.length,
+          canAnalyze: requiredFiles['package.json'].exists ||
+                      requiredFiles['node_modules'].exists,
+        };
+        console.log('📊 Validation summary:', JSON.stringify(validationSummary, null, 2));
+
+        // If neither package.json nor node_modules exists, analysis will be minimal
+        if (!validationSummary.canAnalyze) {
+          const criticalMsg = 'Cannot perform analysis: No package.json or node_modules found. ' +
+                             'Results will be empty or inaccurate.';
+          warnings.push({
+            type: 'CANNOT_ANALYZE',
+            severity: 'CRITICAL',
+            message: criticalMsg,
+          });
+          console.error('❌ CRITICAL:', criticalMsg);
+        }
+
+        // Store warnings in upload document for UI display
+        if (warnings.length > 0) {
+          await event.data.after.ref.update({
+            validationWarnings: warnings,
+            validationSummary: validationSummary,
+          });
         }
       } catch (vErr) {
         console.warn('Warning: failed to validate archive contents; proceeding. Error:', vErr);
@@ -262,7 +287,7 @@ exports.analyzeOnUpload = onDocumentUpdated({
       // If no Cloud Run URL was provided or the POST failed, run analyzer
       // locally (best-effort fallback). This keeps behavior backward
       // compatible while allowing opt-in delegation.
-      const analyzer = new SCAPlatformAnalyzer(extractPath);
+      const analyzer = new SCAPlatformAnalyzer(rootToCheck);
       const analysisResults = await analyzer.comprehensiveAnalysis();
 
       // 5. Save report file locally and upload to reports/
@@ -273,18 +298,32 @@ exports.analyzeOnUpload = onDocumentUpdated({
       const reportUploadPath = `reports/${reportFileName}`;
       await bucket.upload(reportPath, {
         destination: reportUploadPath,
-        metadata: {contentType: 'application/json'},
+        metadata: {
+          contentType: 'application/json',
+          metadata: {
+            firebaseStorageDownloadTokens: require('uuid').v4(), // Generate access token
+          },
+        },
       });
       console.log('✅ Uploaded report to', reportUploadPath);
 
-      // 6. Store lightweight results in 'results' collection and keep the
-      // complete analysis JSON in Cloud Storage under `reportUploadPath`.
-      // Storing the entire analysis object in Firestore can cause large
-      // documents and memory pressure when the function builds them.
+      // Make file publicly readable and get public URL
+      const reportFile = bucket.file(reportUploadPath);
+      await reportFile.makePublic();
+      // Construct public URL
+      const reportUrl = `https://storage.googleapis.com/${bucket.name}/${reportUploadPath}`;
+      console.log('✅ Generated public URL for report');
+
+      // 6. Store complete results in 'results' collection with multiple access options:
+      // - data: Full JSON embedded in Firestore (for immediate UI display)
+      // - reportUrl: Signed download URL (for downloading JSON file)
+      // - reportPath: Storage path (for direct Storage access)
       await db.collection('results').doc(uploadId).set({
         uid: afterData.uid,
         uploadId,
         reportPath: reportUploadPath,
+        reportUrl: reportUrl, // Signed URL for download (7 days)
+        data: analysisResults, // Full JSON data for in-app viewing
         analyzedAt: FieldValue.serverTimestamp(),
         status: 'completed',
         summary: analysisResults.reports?.executiveSummary || 'Analysis completed',
@@ -292,6 +331,7 @@ exports.analyzeOnUpload = onDocumentUpdated({
           packagesFound: (analysisResults.sbom?.packages || []).length,
           riskScore: analysisResults.riskAssessment?.overallRiskScore || null,
         },
+        validationWarnings: warnings.length > 0 ? warnings : null,
       });
 
       // 7. Update upload document status
@@ -302,6 +342,9 @@ exports.analyzeOnUpload = onDocumentUpdated({
           packagesFound: (analysisResults.sbom?.packages || []).length,
           riskLevel: analysisResults.riskAssessment?.overallRiskScore || null,
           reportPath: reportUploadPath,
+          reportUrl: reportUrl, // Add download URL
+          hasWarnings: warnings.length > 0,
+          warningCount: warnings.length,
         },
       });
 

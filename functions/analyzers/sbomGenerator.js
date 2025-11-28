@@ -1,38 +1,137 @@
 const fs = require('fs');
 const path = require('path');
 
-console.log('[analyzers] loaded: sbomGenerator.js');
 console.log('🎯 analyzer loaded: analyzers/sbomGenerator.js');
 
 /**
- * Lightweight SBOM generator that does NOT rely on Docker or external native tools.
- * Produces an SPDX-like JSON structure with a `packages` array so existing code
- * can consume it (e.g. analysisResults.sbom.packages.length).
+ * ============================================================================
+ * SBOM Generator - Docker/Cloud Run Ready
+ * ============================================================================
  *
- * Supported strategies (in order):
- *  - npm: parse package-lock.json (preferred)
- *  - npm fallback: parse package.json dependencies/devDependencies
- *  - python: parse requirements.txt (simple 'pkg==version' lines)
+ * Lightweight Software Bill of Materials (SBOM) generator that produces SPDX 2.3
+ * compliant JSON documents. Designed for Docker/Cloud Run environments with
+ * comprehensive logging and error handling for production observability.
+ *
+ * KEY FEATURES:
+ * - No external dependencies (uses only Node.js built-ins: fs, path)
+ * - Multiple fallback strategies for maximum compatibility
+ * - Node_modules enrichment for complete package metadata
+ * - Detailed logging suitable for Docker/Cloud Run log aggregation
+ * - Comprehensive error handling with stack traces
+ * - Performance metrics (generation time, enrichment stats)
+ *
+ * SUPPORTED STRATEGIES (in order of preference):
+ * 1. package-lock.json - Most accurate, includes resolved URLs and integrity hashes
+ * 2. package.json - Fallback for npm projects without lock file
+ * 3. requirements.txt - Python projects (simple parser for pkg==version format)
+ * 4. Recursive project scan - Searches for all package.json files in project tree
+ * 5. Empty SBOM - Last resort when no package manifests are found
+ *
+ * OUTPUT FORMAT:
+ * SPDX 2.3 JSON with:
+ * - packages[]: Array of package objects with SPDXID, name, version, license, etc.
+ * - metadata: Generation time, strategies used, file summary, enrichment statistics
+ *
+ * DOCKER/CLOUD RUN COMPATIBILITY:
+ * - All console.log/warn/error output goes to stdout/stderr for log aggregation
+ * - No file system writes (read-only operation)
+ * - Synchronous file operations for predictable behavior in containers
+ * - Detailed error context for remote debugging
+ * ============================================================================
  */
+
 /**
- * Generate an SPDX-like SBOM for the provided project path.
- * @param {string} projectPath - Path to the project root to analyze
- * @return {Promise<object>} SPDX-like SBOM document
+ * Generate an SPDX 2.3 compliant SBOM for the provided project path.
+ *
+ * This is the main entry point. It tries multiple strategies to extract package
+ * information and enriches the result with data from node_modules when available.
+ *
+ * @param {string} projectPath - Absolute path to the project root to analyze
+ * @return {Promise<object>} SPDX 2.3 JSON document with packages[] and metadata
  */
 async function generateSBOM(projectPath) {
-  const root = path.resolve(projectPath);
+  const root = path.resolve(projectPath || '.');
+  const start = Date.now();
+  const strategiesUsed = [];
 
-  // Helpers
   /**
-   * Build a minimal SPDX-like package object for the SBOM.
+   * UTILITY: Extract repository URL from package.json
+   *
+   * Handles both string format ("git://...") and object format ({url: "git://..."}).
+   * Logs warnings when extraction fails for debugging in Docker/Cloud Run logs.
+   *
+   * @param {object} pj - Parsed package.json object
+   * @return {string} Repository URL or empty string
+   */
+  const getRepoUrl = (pj) => {
+    try {
+      if (!pj || !pj.repository) return '';
+      if (typeof pj.repository === 'string') return pj.repository;
+      if (pj.repository && pj.repository.url) return pj.repository.url;
+    } catch (error) {
+      console.warn('sbomGenerator: error extracting repo URL:', error.message);
+    }
+    return '';
+  };
+
+  /**
+   * UTILITY: Build file system summary for metadata
+   *
+   * Checks for existence and size of key package manifest files:
+   * - package.json, package-lock.json, yarn.lock, node_modules
+   *
+   * Logs warnings for stat failures (helpful for Docker volume mount debugging).
+   *
+   * @return {object} File summary with boolean flags and sizes
+   */
+  const buildFileSummary = () => {
+    try {
+      const stat = (p) => {
+        try {
+          return fs.statSync(p);
+        } catch (error) {
+          console.warn(`sbomGenerator: cannot stat ${p}:`, error.message);
+          return null;
+        }
+      };
+
+      const pj = stat(path.join(root, 'package.json'));
+      const pl = stat(path.join(root, 'package-lock.json'));
+      const yl = stat(path.join(root, 'yarn.lock'));
+      const nm = stat(path.join(root, 'node_modules'));
+
+      return {
+        packageJson: !!pj,
+        packageJsonSize: pj ? pj.size : 0,
+        packageLock: !!pl,
+        packageLockSize: pl ? pl.size : 0,
+        yarnLock: !!yl,
+        yarnLockSize: yl ? yl.size : 0,
+        nodeModules: !!nm,
+      };
+    } catch (error) {
+      console.error('sbomGenerator: error building file summary:', error.message);
+      return {};
+    }
+  };
+
+  /**
+   * UTILITY: Create SPDX 2.3 compliant package object
+   *
+   * Generates a standardized package entry with:
+   * - SPDXID: Unique identifier (sanitized for spec compliance)
+   * - name, versionInfo: Package identification
+   * - downloadLocation, licenseConcluded, licenseDeclared: SPDX required fields
+   * - Optional: description, externalRefs, integrity, resolved URL
+   *
    * @param {string} name - Package name
-   * @param {string} version - Package version string
-   * @param {object} [opts] - Optional metadata (resolved, license, description)
-   * @return {object} SPDX-like package object
+   * @param {string} version - Package version
+   * @param {object} opts - Optional fields (license, description, extra metadata)
+   * @return {object} SPDX package object
    */
   const makeSpdxPackage = (name, version, opts = {}) => {
     const safeId = `SPDXRef-Package-${name}-${version}`.replace(/[^a-zA-Z0-9-_.]/g, '-');
-    return {
+    return Object.assign({
       SPDXID: safeId,
       name,
       versionInfo: version || '0.0.0',
@@ -41,20 +140,192 @@ async function generateSBOM(projectPath) {
       licenseDeclared: opts.license || 'NOASSERTION',
       copyrightText: 'NOASSERTION',
       description: opts.description || '',
-      externalRefs: [
-        {
-          referenceCategory: 'PACKAGE-MANAGER',
-          referenceType: 'purl',
-          referenceLocator: `pkg:npm/${name}@${version}`,
-        },
-      ],
-    };
+      externalRefs: opts.externalRefs || [],
+    }, opts.extra || {});
   };
 
-  // 1) Try package-lock.json
+  /**
+   * ENRICHMENT: Scan node_modules to augment package metadata
+   *
+   * This function significantly enhances SBOM quality by:
+   * 1. Scanning installed packages in node_modules/
+   * 2. Reading each package's actual package.json
+   * 3. Adding license, description, repository data from source
+   * 4. Handling both scoped (@org/pkg) and normal packages
+   *
+   * DOCKER COMPATIBILITY:
+   * - Works with bind-mounted node_modules or COPY'd in Dockerfile
+   * - Logs progress for observability in container logs
+   * - Gracefully skips if node_modules not present
+   *
+   * ENRICHMENT STATS:
+   * - Tracks packages added and packages updated
+   * - Final count logged for verification
+   *
+   * @param {Array} packages - Existing packages array to enrich
+   * @return {Array} Enriched packages array
+   */
+  const enrichFromNodeModules = (packages) => {
+    try {
+      const nmRoot = path.join(root, 'node_modules');
+      if (!fs.existsSync(nmRoot)) {
+        console.log('sbomGenerator: node_modules not found, skipping enrichment');
+        return packages;
+      }
+
+      console.log('sbomGenerator: enriching packages from node_modules');
+      const pkgMap = {};
+      packages.forEach((p) => {
+        if (p && p.name) pkgMap[p.name] = p;
+      });
+
+      const entries = fs.readdirSync(nmRoot, {withFileTypes: true});
+      let enrichedCount = 0;
+
+      for (const ent of entries) {
+        if (!ent.isDirectory()) continue;
+
+        // scoped packages
+        if (ent.name.startsWith('@')) {
+          const scopeDir = path.join(nmRoot, ent.name);
+          try {
+            const scoped = fs.readdirSync(scopeDir, {withFileTypes: true});
+            for (const s of scoped) {
+              if (!s.isDirectory()) continue;
+              const pjson = path.join(scopeDir, s.name, 'package.json');
+              try {
+                const pj = JSON.parse(fs.readFileSync(pjson, 'utf8'));
+                const nmName = `${ent.name}/${s.name}`;
+                const repoUrl = getRepoUrl(pj);
+                if (!pkgMap[nmName]) {
+                  packages.push(makeSpdxPackage(nmName, pj.version || '0.0.0', {
+                    license: pj.license || 'NOASSERTION',
+                    description: pj.description || '',
+                    extra: {repository: repoUrl || ''},
+                  }));
+                  enrichedCount++;
+                } else {
+                  const existing = pkgMap[nmName];
+                  existing.repository = existing.repository || repoUrl;
+                  existing.description = existing.description || pj.description || '';
+                  enrichedCount++;
+                }
+              } catch (error) {
+                const pkgId = `${ent.name}/${s.name}`;
+                console.warn('sbomGenerator: failed to read scoped package', pkgId, error.message);
+              }
+            }
+          } catch (error) {
+            console.warn('sbomGenerator: failed to read scope directory', ent.name, error.message);
+          }
+
+          continue;
+        }
+
+        // normal package folder
+        const pjson = path.join(nmRoot, ent.name, 'package.json');
+        try {
+          const pj = JSON.parse(fs.readFileSync(pjson, 'utf8'));
+          const repoUrl = getRepoUrl(pj);
+          if (!pkgMap[ent.name]) {
+            packages.push(makeSpdxPackage(ent.name, pj.version || '0.0.0', {
+              license: pj.license || 'NOASSERTION',
+              description: pj.description || '',
+              extra: {repository: repoUrl || ''},
+            }));
+            enrichedCount++;
+          } else {
+            const existing = pkgMap[ent.name];
+            existing.repository = existing.repository || repoUrl;
+            existing.description = existing.description || pj.description || '';
+            enrichedCount++;
+          }
+        } catch (error) {
+          console.warn('sbomGenerator: failed to read package', ent.name, error.message);
+        }
+      }
+
+      console.log(`sbomGenerator: enriched ${enrichedCount} packages from node_modules`);
+    } catch (error) {
+      console.error('sbomGenerator: error during enrichment:', error.message);
+      console.error('Stack:', error.stack);
+    }
+
+    return packages;
+  };
+
+  /**
+   * FINALIZATION: Add metadata, enrich packages, and log completion
+   *
+   * This function:
+   * 1. Calls enrichment to scan node_modules
+   * 2. Calculates generation time and enrichment statistics
+   * 3. Attaches comprehensive metadata to SBOM document:
+   *    - generationTimeMs: Performance metric for monitoring
+   *    - strategiesUsed: Which detection methods succeeded
+   *    - fileSummary: Manifest files present in project
+   *    - enrichmentStats: Before/after package counts, packages added
+   *
+   * DOCKER/CLOUD RUN OBSERVABILITY:
+   * - Logs completion with package count and timing
+   * - Logs strategy used for debugging
+   * - Stack traces on errors for remote troubleshooting
+   *
+   * @param {object} doc - SBOM document to finalize
+   * @param {string} strategy - Strategy name that generated this SBOM
+   * @return {object} Finalized SBOM with metadata
+   */
+  const finalize = (doc, strategy) => {
+    try {
+      if (strategy) strategiesUsed.push(strategy);
+      doc = doc || {};
+      doc.packages = doc.packages || [];
+      const beforeEnrich = doc.packages.length;
+      doc.packages = enrichFromNodeModules(doc.packages);
+      const afterEnrich = doc.packages.length;
+
+      const pkgCount = doc.packages.length;
+      const elapsed = Date.now() - start;
+
+      doc.metadata = doc.metadata || {};
+      doc.metadata.generationTimeMs = elapsed;
+      doc.metadata.strategiesUsed = Array.from(new Set(strategiesUsed));
+      doc.metadata.fileSummary = buildFileSummary();
+      doc.metadata.enrichmentStats = {
+        beforeEnrichment: beforeEnrich,
+        afterEnrichment: afterEnrich,
+        packagesAdded: afterEnrich - beforeEnrich,
+      };
+
+      console.log('🎯 sbomGenerator: generateSBOM done - packages:', pkgCount);
+      console.log('sbomGenerator: strategy:', strategy, 'time:', elapsed, 'ms');
+    } catch (error) {
+      console.error('sbomGenerator: error during finalization:', error.message);
+      console.error('Stack:', error.stack);
+    }
+    return doc;
+  };
+
+  /**
+   * ===========================================================================
+   * STRATEGY 1: package-lock.json (NPM Lock File)
+   * ===========================================================================
+   *
+   * PREFERRED STRATEGY for npm projects.
+   *
+   * Extracts complete dependency tree with:
+   * - Exact versions (not ranges)
+   * - Resolved URLs (download locations)
+   * - Integrity hashes (SRI for verification)
+   * - License information when available
+   *
+   * This provides the most accurate and complete SBOM for npm-based projects.
+   */
   const lockPath = path.join(root, 'package-lock.json');
   if (fs.existsSync(lockPath)) {
     try {
+      console.log('sbomGenerator: attempting package-lock.json strategy');
+      strategiesUsed.push('package-lock');
       const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
       const deps = lock.dependencies || {};
       const packages = Object.entries(deps).map(([pkgName, pkgData]) => {
@@ -62,17 +333,29 @@ async function generateSBOM(projectPath) {
         if (pkgData.version) version = pkgData.version;
         else if (pkgData.resolved) version = extractVersionFromResolved(pkgData.resolved);
 
+        const extra = {};
+        if (pkgData.integrity) extra.integrity = pkgData.integrity;
+        if (pkgData.resolved) extra.resolved = pkgData.resolved;
+
         return makeSpdxPackage(pkgName, version, {
-          resolved: pkgData.resolved || 'NOASSERTION',
           license: pkgData.license || 'NOASSERTION',
           description: pkgData.description || '',
+          externalRefs: [
+            {
+              referenceCategory: 'PACKAGE-MANAGER',
+              referenceType: 'purl',
+              referenceLocator: `pkg:npm/${pkgName}@${version}`,
+            },
+          ],
+          extra,
         });
       });
 
+      console.log(`sbomGenerator: package-lock.json found ${packages.length} packages`);
       const docName1 = path.basename(root);
       const documentNamespace1 = 'https://example.org/spdxdocs/' + docName1 + '-' + Date.now();
 
-      return {
+      return finalize({
         spdxVersion: 'SPDX-2.3',
         dataLicense: 'CC0-1.0',
         SPDXID: 'SPDXRef-DOCUMENT',
@@ -83,17 +366,33 @@ async function generateSBOM(projectPath) {
           creators: ['Tool: license-checker-sbomGenerator'],
         },
         packages,
-      };
-    } catch (e) {
-      // fallthrough to other strategies
-      console.warn('Failed to parse package-lock.json for SBOM:', e.message);
+      }, 'package-lock');
+    } catch (error) {
+      console.error('sbomGenerator: Failed to parse package-lock.json:', error.message);
+      console.error('Stack:', error.stack);
     }
   }
 
-  // 2) Try package.json dependencies
+  /**
+   * ===========================================================================
+   * STRATEGY 2: package.json (NPM Manifest)
+   * ===========================================================================
+   *
+   * FALLBACK for npm projects without package-lock.json.
+   *
+   * Extracts dependencies from package.json:
+   * - dependencies + devDependencies
+   * - Version ranges (not exact versions)
+   * - No integrity hashes or resolved URLs
+   *
+   * Less precise than package-lock.json but ensures we capture dependencies
+   * even in projects without lock files.
+   */
   const pjPath = path.join(root, 'package.json');
   if (fs.existsSync(pjPath)) {
     try {
+      console.log('sbomGenerator: attempting package.json strategy');
+      strategiesUsed.push('package-json');
       const pj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
       const deps = Object.assign({}, pj.dependencies || {}, pj.devDependencies || {});
       const packages = Object.entries(deps).map(([pkgName, pkgRange]) => {
@@ -101,10 +400,11 @@ async function generateSBOM(projectPath) {
         return makeSpdxPackage(pkgName, pkgRange, {license: 'NOASSERTION'});
       });
 
+      console.log(`sbomGenerator: package.json found ${packages.length} dependencies`);
       const docName2 = pj.name || path.basename(root);
       const documentNamespace2 = 'https://example.org/spdxdocs/' + docName2 + '-' + Date.now();
 
-      return {
+      return finalize({
         spdxVersion: 'SPDX-2.3',
         dataLicense: 'CC0-1.0',
         SPDXID: 'SPDXRef-DOCUMENT',
@@ -115,16 +415,36 @@ async function generateSBOM(projectPath) {
           creators: ['Tool: license-checker-sbomGenerator'],
         },
         packages,
-      };
-    } catch (e) {
-      console.warn('Failed to parse package.json for SBOM:', e.message);
+      }, 'package-json');
+    } catch (error) {
+      console.error('sbomGenerator: Failed to parse package.json:', error.message);
+      console.error('Stack:', error.stack);
     }
   }
 
-  // 3) Try Python requirements.txt (very simple parser)
+  /**
+   * ===========================================================================
+   * STRATEGY 3: requirements.txt (Python)
+   * ===========================================================================
+   *
+   * PYTHON PROJECT SUPPORT.
+   *
+   * Simple parser for pip requirements.txt format:
+   * - Supports: pkg==1.2.3, pkg>=1.2, pkg<2.0 syntax
+   * - Extracts package name and version/constraint
+   * - No license or metadata (not in requirements.txt)
+   *
+   * LIMITATIONS:
+   * - Basic parser, doesn't handle all pip syntax (-e, git+, etc.)
+   * - No dependency resolution (only top-level requirements)
+   *
+   * For better Python SBOM, consider using pip-tools or similar in Dockerfile.
+   */
   const reqPath = path.join(root, 'requirements.txt');
   if (fs.existsSync(reqPath)) {
     try {
+      console.log('sbomGenerator: attempting requirements.txt strategy');
+      strategiesUsed.push('requirements-txt');
       const lines = fs.readFileSync(reqPath, 'utf8')
         .split(/\r?\n/)
         .map((l) => l.trim())
@@ -147,10 +467,11 @@ async function generateSBOM(projectPath) {
         };
       });
 
+      console.log(`sbomGenerator: requirements.txt found ${packages.length} packages`);
       const docName3 = path.basename(root);
       const documentNamespace3 = 'https://example.org/spdxdocs/' + docName3 + '-' + Date.now();
 
-      return {
+      return finalize({
         spdxVersion: 'SPDX-2.3',
         dataLicense: 'CC0-1.0',
         SPDXID: 'SPDXRef-DOCUMENT',
@@ -161,15 +482,46 @@ async function generateSBOM(projectPath) {
           creators: ['Tool: license-checker-sbomGenerator'],
         },
         packages,
-      };
-    } catch (e) {
-      console.warn('Failed to parse requirements.txt for SBOM:', e.message);
+      }, 'requirements-txt');
+    } catch (error) {
+      console.error('sbomGenerator: Failed to parse requirements.txt:', error.message);
+      console.error('Stack:', error.stack);
     }
   }
 
-  // 4) Last resort: do a lightweight recursive search for package.json files under project
+  /**
+   * ===========================================================================
+   * STRATEGY 4: Recursive Project Scan
+   * ===========================================================================
+   *
+   * LAST-RESORT automatic discovery.
+   *
+   * Recursively walks project directory tree looking for package.json files:
+   * - Finds packages in subdirectories (monorepos, nested projects)
+   * - Skips node_modules to avoid huge scans
+   * - Extracts name and version from each package.json found
+   *
+   * USE CASES:
+   * - Monorepo projects without root package-lock.json
+   * - Multi-language projects with npm packages in subdirs
+   * - Projects with unconventional structure
+   *
+   * DOCKER CONSIDERATION:
+   * - Only scans files present in container (respects .dockerignore)
+   * - Can be slow on large projects, but thorough
+   */
   try {
+    console.log('sbomGenerator: attempting project-scan strategy (recursive)');
     const packages = [];
+
+    /**
+     * Recursive directory walker
+     *
+     * Traverses directory tree, finding all package.json files.
+     * Skips node_modules to prevent scanning thousands of dependency packages.
+     *
+     * @param {string} dir - Directory to scan
+     */
     const walk = (dir) => {
       const entries = fs.readdirSync(dir, {withFileTypes: true});
       for (const ent of entries) {
@@ -190,21 +542,28 @@ async function generateSBOM(projectPath) {
                 ),
               );
             }
-          } catch (e) {
-            // ignore malformed package.json
+          } catch (error) {
+            console.warn('sbomGenerator: failed to parse package.json at', full, error.message);
           }
         }
-        if (ent.isDirectory()) walk(full);
+        if (ent.isDirectory()) {
+          try {
+            walk(full);
+          } catch (error) {
+            console.warn('sbomGenerator: failed to walk directory', full, error.message);
+          }
+        }
       }
     };
 
     walk(root);
 
     if (packages.length > 0) {
+      console.log(`sbomGenerator: project-scan found ${packages.length} packages`);
       const docName4 = path.basename(root);
       const documentNamespace4 = 'https://example.org/spdxdocs/' + docName4 + '-' + Date.now();
 
-      return {
+      return finalize({
         spdxVersion: 'SPDX-2.3',
         dataLicense: 'CC0-1.0',
         SPDXID: 'SPDXRef-DOCUMENT',
@@ -215,16 +574,37 @@ async function generateSBOM(projectPath) {
           creators: ['Tool: license-checker-sbomGenerator'],
         },
         packages,
-      };
+      }, 'project-scan');
     }
-  } catch (e) {
-    console.warn('Fallback SBOM scan failed:', e.message);
+  } catch (error) {
+    console.error('sbomGenerator: Fallback SBOM scan failed:', error.message);
+    console.error('Stack:', error.stack);
   }
 
-  // If everything fails, return empty SBOM
+  /**
+   * ===========================================================================
+   * STRATEGY 5: Empty SBOM (Fallback)
+   * ===========================================================================
+   *
+   * FINAL FALLBACK when no package manifests are found.
+   *
+   * Returns a valid SPDX 2.3 document with:
+   * - Empty packages array
+   * - Full metadata and generation stats
+   * - "empty" in strategiesUsed
+   *
+   * This ensures the analyzer always returns a valid SBOM structure,
+   * even for projects without dependencies or unrecognized formats.
+   *
+   * DOCKER/CLOUD RUN:
+   * - Warning logged for visibility in container logs
+   * - Indicates possible issue with uploaded file or extraction
+   */
+  console.warn('sbomGenerator: All strategies failed, returning empty SBOM');
   const docName5 = path.basename(root);
   const documentNamespace5 = 'https://example.org/spdxdocs/' + docName5 + '-' + Date.now();
-  return {
+  strategiesUsed.push('empty');
+  return finalize({
     spdxVersion: 'SPDX-2.3',
     dataLicense: 'CC0-1.0',
     SPDXID: 'SPDXRef-DOCUMENT',
@@ -235,14 +615,25 @@ async function generateSBOM(projectPath) {
       creators: ['Tool: license-checker-sbomGenerator'],
     },
     packages: [],
-  };
+  }, 'empty');
 }
 
 /**
- * Extract a semver-like version string from a resolved package tarball URL.
- * Example matches: "-1.2.3.tgz" or "-1.2.3-beta.tgz".
+ * HELPER: Extract semantic version from package tarball URL
+ *
+ * Parses npm registry URLs to extract version strings:
+ * - Input: "https://registry.npmjs.org/pkg/-/pkg-1.2.3.tgz"
+ * - Output: "1.2.3"
+ *
+ * Handles:
+ * - Standard packages: /package/-/package-1.2.3.tgz
+ * - Scoped packages: /@scope/name/-/name-1.2.3.tgz
+ * - Pre-release versions: 1.2.3-beta.1, 1.2.3-rc.2
+ *
+ * Used as fallback when package-lock.json has resolved URL but missing version field.
+ *
  * @param {string} resolved - The resolved URL or path from package-lock.json
- * @return {string} extracted version (or '0.0.0' when no version found)
+ * @return {string} Extracted version string or '0.0.0' if extraction fails
  */
 function extractVersionFromResolved(resolved) {
   // Try to extract /package/-/package-1.2.3.tgz or @scope/name/-/name-1.2.3.tgz
