@@ -73,3 +73,21 @@ Next steps after deploy
 If you'd like, I can:
 - scaffold a staging workflow that deploys from `staging` branch to a staging Firebase project,
 - or implement a GitHub Actions job that tests the analyzer with a small sample archive before deploy.
+
+Memory note
+-----------
+
+The `analyzeOnUpload` Cloud Function requires more memory for larger archives. It has been configured to use 1GB of memory in `functions/index.js` (the option is `memory: '1GB'`). If you need to change this later, edit `functions/index.js` and redeploy.
+
+To redeploy only functions after making changes:
+
+```powershell
+# deploy only functions to the configured Firebase project
+firebase deploy --project YOUR_FIREBASE_PROJECT_ID --only functions
+```
+
+Or, with the Firebase CLI you can deploy a single function (useful for quicker iteration):
+
+```powershell
+firebase deploy --project YOUR_FIREBASE_PROJECT_ID --only functions:analyzeOnUpload
+```

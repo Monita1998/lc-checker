@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, getDocs } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import { auth, db, storage } from "../../firebase";
+import { ref as storageRef, deleteObject } from 'firebase/storage';
 import Sidebar from "../../Components/SideBar/Sidebar";
 import Footer from "../../Components/Footer/FooterNew";
 import { toast } from "react-toastify";
@@ -14,6 +15,7 @@ const ProjectsPage = () => {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
+  const [notifiedFailureId, setNotifiedFailureId] = useState(null);
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -79,7 +81,48 @@ const ProjectsPage = () => {
         }
       } catch (innerErr) {
         console.warn("⚠️ Failed to delete associated results:", innerErr);
-        // continue to delete the upload document anyway
+        // continue to delete the upload document and storage objects anyway
+      }
+
+      // Attempt to delete the uploaded file in Cloud Storage (if storagePath is present)
+      try {
+        const storagePath = project.storagePath || project.downloadURL || project.path || project.filePath;
+        if (storagePath) {
+          // If storagePath is a gs:// URL, convert to a path
+          let objectPath = storagePath;
+          if (objectPath.startsWith('gs://')) {
+            // gs://bucket-name/path/to/object
+            const parts = objectPath.replace('gs://', '').split('/');
+            parts.shift(); // remove bucket
+            objectPath = parts.join('/');
+          }
+
+          // If it's a full https URL we cannot reliably convert to object path; skip in that case
+          if (!objectPath.startsWith('http')) {
+            try {
+              await deleteObject(storageRef(storage, objectPath));
+              console.log('✅ Deleted uploaded file from storage:', objectPath);
+            } catch (sErr) {
+              console.warn('⚠️ Failed to delete uploaded storage object:', sErr);
+            }
+          }
+        }
+      } catch (sErrOuter) {
+        console.warn('⚠️ Storage deletion step failed:', sErrOuter);
+      }
+
+      // Attempt to delete the report file in reports/ if present
+      try {
+        const reportPath = `reports/${project.id}-sca-report.json`;
+        try {
+          await deleteObject(storageRef(storage, reportPath));
+          console.log('✅ Deleted report file from storage:', reportPath);
+        } catch (rErr) {
+          // not fatal
+          console.warn('⚠️ Report deletion failed or report does not exist:', rErr);
+        }
+      } catch (rErrOuter) {
+        console.warn('⚠️ Report deletion step failed:', rErrOuter);
       }
 
       // Delete the upload document
@@ -176,7 +219,8 @@ const ProjectsPage = () => {
       'not_scanned': { class: 'status-not-scanned', text: 'Not Scanned' },
       'scanning': { class: 'status-scanning', text: 'Scanning...' },
       'scanned': { class: 'status-completed', text: 'Scanned' },
-      'failed': { class: 'status-failed', text: 'Failed' },
+  'failed': { class: 'status-failed', text: 'Failed' },
+  'invalid_zip': { class: 'status-failed', text: 'Invalid Zip' },
       'error': { class: 'status-failed', text: 'Error' },
       'uploading': { class: 'status-uploading', text: 'Uploading' },
       'completed': { class: 'status-completed', text: 'Completed' },
@@ -205,6 +249,8 @@ const ProjectsPage = () => {
     switch (status) {
       case 'not_scanned':
         return "Project uploaded but not yet scanned for license compliance.";
+      case 'invalid_zip':
+        return `Uploaded zip contains unexpected files. Only node_modules, package.json and package-lock.json are allowed.`;
       case 'scanning':
         return "Project is currently being scanned for licenses...";
       case 'scanned':
@@ -223,6 +269,17 @@ const ProjectsPage = () => {
         return "Status unknown.";
     }
   };
+
+  // Notify user when selected project has failed due to invalid zip / other errors
+  useEffect(() => {
+    if (!selectedProject) return;
+    if ((selectedProject.status === 'failed' || selectedProject.status === 'invalid_zip') && selectedProject.errorMessage) {
+      if (selectedProject.id !== notifiedFailureId) {
+        toast.error(selectedProject.errorMessage, { autoClose: 8000 });
+        setNotifiedFailureId(selectedProject.id);
+      }
+    }
+  }, [selectedProject, notifiedFailureId]);
 
   
 
@@ -328,46 +385,41 @@ const ProjectsPage = () => {
                               </div>
 
                               <div className="action-row">
-                                {selectedProject.status === 'scanned' ? (
-                                  <>
-                                    <div className="action-left">
-                                      <button 
-                                        className="download-btn"
-                                        onClick={() => handleDownloadResults(selectedProject)}
-                                        disabled={downloadingId === selectedProject.id}
-                                      >
-                                        {downloadingId === selectedProject.id ? 'Downloading' : 'Download the result'}
-                                      </button>
-                                    </div>
+                                <div className="action-left">
+                                  {selectedProject.status === 'scanned' ? (
+                                    <button 
+                                      className="download-btn"
+                                      onClick={() => handleDownloadResults(selectedProject)}
+                                      disabled={downloadingId === selectedProject.id}
+                                    >
+                                      {downloadingId === selectedProject.id ? 'Downloading' : 'Download the result'}
+                                    </button>
+                                  ) : (
+                                    // No manual "Start" button: scanning is automatic. Show nothing here for unscanned projects.
+                                    null
+                                  )}
+                                </div>
 
-                                    <div className="action-center">
-                                      <button 
-                                        className="analyze-btn"
-                                        onClick={() => handleViewResults(selectedProject)}
-                                      >
-                                        View the result
-                                      </button>
-                                    </div>
+                                <div className="action-center">
+                                  {selectedProject.status === 'scanned' && (
+                                    <button 
+                                      className="analyze-btn"
+                                      onClick={() => handleViewResults(selectedProject)}
+                                    >
+                                      View the result
+                                    </button>
+                                  )}
+                                </div>
 
-                                    <div className="action-right">
-                                      <button 
-                                        className="delete-btn-large"
-                                        onClick={() => handleDeleteProject(selectedProject)}
-                                        disabled={deletingId === selectedProject.id}
-                                      >
-                                        {deletingId === selectedProject.id ? 'Deleting' : 'Delete the project'}
-                                      </button>
-                                    </div>
-                                  </>
-                                ) : selectedProject.status === 'not_scanned' ? (
-                                  <div className="action-center">
-                                    <button className="analyze-btn">Start</button>
-                                  </div>
-                                ) : (
-                                  <div className="action-center">
-                                    <button className="analyze-btn" disabled>Scanning</button>
-                                  </div>
-                                )}
+                                <div className="action-right">
+                                  <button 
+                                    className="delete-btn-large"
+                                    onClick={() => handleDeleteProject(selectedProject)}
+                                    disabled={deletingId === selectedProject.id}
+                                  >
+                                    {deletingId === selectedProject.id ? 'Deleting' : 'Delete the project'}
+                                  </button>
+                                </div>
                               </div>
                             </div>
 

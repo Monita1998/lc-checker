@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
+console.log('[analyzers] loaded: sbomGenerator.js');
+console.log('🎯 analyzer loaded: analyzers/sbomGenerator.js');
+
 /**
  * Lightweight SBOM generator that does NOT rely on Docker or external native tools.
  * Produces an SPDX-like JSON structure with a `packages` array so existing code

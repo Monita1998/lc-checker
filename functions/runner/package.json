@@ -1,0 +1,16 @@
+{
+  "name": "lc-checker-runner",
+  "version": "0.1.0",
+  "private": true,
+  "main": "runner.js",
+  "scripts": {
+    "start": "node runner.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "@google-cloud/storage": "^6.9.0",
+    "@google-cloud/firestore": "^6.6.0",
+    "adm-zip": "^0.5.9",
+    "license-checker": "^25.0.0"
+  }
+}

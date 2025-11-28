@@ -7,6 +7,9 @@ const os = require('os');
 const {unzipFile} = require('./utils/unzipper');
 const SCAPlatformAnalyzer = require('./analyzers/SCAPlatformAnalyzer');
 
+console.log('[analyzers] loaded: SCAPlatformAnalyzer.js');
+console.log('🎯 analyzer loaded: analyzers/SCAPlatformAnalyzer.js');
+
 admin.initializeApp();
 const storage = admin.storage();
 

@@ -1,0 +1,270 @@
+{
+  "sbom": {
+    "spdxVersion": "SPDX-2.3",
+    "dataLicense": "CC0-1.0",
+    "SPDXID": "SPDXRef-DOCUMENT",
+    "name": "SBOM-for-extracted-sample",
+    "documentNamespace": "https://example.org/spdxdocs/extracted-sample-1762765219305",
+    "creationInfo": {
+      "created": "2025-11-10T09:00:19.305Z",
+      "creators": [
+        "Tool: license-checker-sbomGenerator",
+        "Tool: SCA-Platform-Analyzer"
+      ],
+      "metadata": {
+        "mergedFrom": {
+          "enhanced": true,
+          "impl": true
+        }
+      }
+    },
+    "packages": [
+      {
+        "SPDXID": "SPDXRef-Package-hichat-0.4.0",
+        "name": "hichat",
+        "versionInfo": "0.4.0",
+        "downloadLocation": "NOASSERTION",
+        "licenseConcluded": "NOASSERTION",
+        "licenseDeclared": "NOASSERTION",
+        "copyrightText": "NOASSERTION",
+        "description": "a realtime chat web application",
+        "externalRefs": [
+          {
+            "referenceCategory": "PACKAGE-MANAGER",
+            "referenceType": "purl",
+            "referenceLocator": "pkg:npm/hichat@0.4.0"
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "mergedFrom": {
+        "enhanced": true,
+        "impl": true
+      }
+    }
+  },
+  "licenseCompliance": {
+    "summary": {
+      "totalPackages": 1,
+      "compliantPackages": 0,
+      "violations": 0,
+      "warnings": 0,
+      "uniqueLicenses": 1,
+      "licenseCounts": {
+        "NOASSERTION": 1
+      },
+      "licenseDistribution": [
+        {
+          "license": "NOASSERTION",
+          "count": 1,
+          "percentage": 100
+        }
+      ],
+      "metadata": {
+        "mergedFrom": {
+          "enhanced": true,
+          "impl": true
+        }
+      }
+    },
+    "violations": [],
+    "warnings": [
+      {
+        "package": "hichat",
+        "version": "0.4.0",
+        "license": "NOASSERTION",
+        "reason": "missing or unknown license"
+      }
+    ],
+    "riskDistribution": {
+      "distribution": {
+        "UNKNOWN": 1,
+        "metadata": {
+          "mergedFrom": {
+            "enhanced": true,
+            "impl": true
+          }
+        }
+      },
+      "percentages": {
+        "UNKNOWN": 100,
+        "metadata": {
+          "mergedFrom": {
+            "enhanced": true,
+            "impl": true
+          }
+        }
+      },
+      "total": 1,
+      "metadata": {
+        "mergedFrom": {
+          "enhanced": true,
+          "impl": true
+        }
+      }
+    },
+    "qualityMetrics": {
+      "excellent": 0,
+      "good": 0,
+      "fair": 0,
+      "poor": 1,
+      "qualityScore": 0
+    },
+    "licenseUsage": {
+      "mostUsedLicenses": [
+        {
+          "license": "NOASSERTION",
+          "count": 1,
+          "percentage": 100
+        }
+      ],
+      "riskProfile": {
+        "permissivePercentage": 0,
+        "copyleftPercentage": 0,
+        "unknownPercentage": 100
+      }
+    },
+    "metadata": {
+      "mergedFrom": {
+        "enhanced": true,
+        "impl": true
+      }
+    }
+  },
+  "securityVulnerabilities": {
+    "summary": {
+      "totalVulnerabilities": 0,
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "bySeverity": {},
+      "metadata": {
+        "mergedFrom": {
+          "enhanced": true,
+          "impl": true
+        }
+      }
+    },
+    "vulnerabilities": [],
+    "affectedPackages": [],
+    "metadata": {
+      "mergedFrom": {
+        "enhanced": true,
+        "impl": true
+      }
+    }
+  },
+  "riskAssessment": {
+    "overallRiskScore": 0,
+    "highPriorityRisks": [],
+    "mediumPriorityRisks": [],
+    "riskBreakdown": {
+      "licenseRisks": 0,
+      "securityRisks": 0,
+      "totalRisks": 0
+    },
+    "detailedRisks": [],
+    "metadata": {
+      "mergedFrom": {
+        "enhanced": true,
+        "impl": true
+      }
+    }
+  },
+  "reports": {
+    "executiveSummary": {
+      "projectHealth": "UNKNOWN",
+      "topRisks": [],
+      "quickActions": [],
+      "summaryMetrics": {
+        "overallRiskScore": 0,
+        "totalRisks": 0,
+        "highPriority": 0,
+        "complianceStatus": "UNKNOWN",
+        "metadata": {
+          "mergedFrom": {
+            "enhanced": true,
+            "impl": true
+          }
+        }
+      },
+      "metadata": {
+        "mergedFrom": {
+          "enhanced": true,
+          "impl": true
+        }
+      }
+    },
+    "complianceReport": {
+      "violations": [],
+      "warnings": []
+    },
+    "securityReport": {
+      "overallRiskScore": 0,
+      "highPriorityRisks": [],
+      "mediumPriorityRisks": [],
+      "riskBreakdown": {
+        "licenseRisks": 0,
+        "securityRisks": 0,
+        "totalRisks": 0
+      },
+      "detailedRisks": []
+    },
+    "remediationPlan": {
+      "highPriority": [],
+      "mediumPriority": [],
+      "timeline": {
+        "immediate": [],
+        "shortTerm": [],
+        "longTerm": []
+      }
+    },
+    "dashboardData": {
+      "riskDistribution": {
+        "license": 0,
+        "security": 0
+      },
+      "priorityBreakdown": {
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "trendData": [],
+      "healthScore": 100
+    },
+    "metadata": {
+      "mergedFrom": {
+        "enhanced": true,
+        "impl": true
+      }
+    }
+  },
+  "metadata": {
+    "analysisTimestamp": "2025-11-10T09:00:20.212Z",
+    "platformVersion": "1.0",
+    "features": [
+      "SPDX SBOM Generation",
+      "License Compliance Checking",
+      "Security Vulnerability Correlation",
+      "Unified Risk Assessment",
+      "Actionable Reporting"
+    ],
+    "complianceStandards": [
+      "SPDX-2.3",
+      "OWASP Top 10"
+    ],
+    "generator": "sbomGenerator (no-docker)",
+    "metadata": {
+      "mergedFrom": {
+        "enhanced": true,
+        "impl": true
+      }
+    },
+    "mergedFrom": {
+      "enhanced": true,
+      "impl": true
+    }
+  }
+}

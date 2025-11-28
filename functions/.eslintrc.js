@@ -17,6 +17,8 @@ module.exports = {
     'indent': ['error', 2],
     'max-len': ['error', {'code': 100}],
     'no-console': 'off', // Allow console.log in Cloud Functions
+    'require-jsdoc': 'off',
+    'valid-jsdoc': 'off',
   },
   overrides: [
     {

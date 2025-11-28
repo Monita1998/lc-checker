@@ -2,6 +2,9 @@ const path = require('path');
 const axios = require('axios');
 const {generateSBOM} = require('./sbomGenerator');
 
+console.log('[analyzers] loaded: SCAPlatformAnalyzerImpl.js');
+console.log('🎯 analyzer loaded: analyzers/SCAPlatformAnalyzerImpl.js');
+
 /**
  * Performs Software Composition Analysis (SCA) using a local SBOM generator.
  * This implementation is serverless-friendly and does not call Docker or external

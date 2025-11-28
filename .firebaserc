@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "license-checker-2025"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }

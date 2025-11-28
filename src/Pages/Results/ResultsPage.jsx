@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from 'react-router-dom';
 import { collection, query, orderBy, limit, doc, getDoc, getDocs, deleteDoc, where, onSnapshot } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import { auth, db, storage } from "../../firebase";
+import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { onAuthStateChanged } from "firebase/auth";
 import Sidebar from "../../Components/SideBar/Sidebar";
 import Footer from "../../Components/Footer/FooterNew";
@@ -47,51 +48,64 @@ const ResultsPage = () => {
 
       unsubscribeSnapshot = onSnapshot(resultsQuery, async (snapshot) => {
         try {
-          const resultsData = [];
+          // Build a map of results keyed by uploadId (or id)
+          const resultsMap = new Map();
           for (const docSnap of snapshot.docs) {
             const resultData = { id: docSnap.id, ...docSnap.data() };
-            if (resultData.uploadId) {
-              try {
-                const uploadDoc = await getDoc(doc(db, "uploads", resultData.uploadId));
-                if (uploadDoc.exists()) {
-                  resultData.projectName = uploadDoc.data().originalName || "Unknown Project";
-                }
-              } catch (e) {
-                // ignore upload fetch errors
-              }
-            }
-            if (!resultData.projectName) {
-              resultData.projectName = resultData.metadata?.projectName || resultData.originalName || "Project Analysis";
-            }
-            resultsData.push(resultData);
+            const key = resultData.uploadId || resultData.id;
+            // ensure we have a projectName (prefer upload originalName when available)
+            resultsMap.set(key, { ...resultData, hasResult: true });
           }
 
-          // If no results were returned for the user, try to recover by looking up uploads the user owns
-          if (resultsData.length === 0 && user && user.uid) {
+          // Always fetch the user's uploads and merge them so the selector shows ALL projects
+          if (user && user.uid) {
             try {
-              const uploadsQ = query(collection(db, 'uploads'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'), limit(20));
+              const uploadsQ = query(collection(db, 'uploads'), where('uid', '==', user.uid), orderBy('uploadedAt', 'desc'), limit(200));
               const uploadsSnap = await getDocs(uploadsQ);
               for (const upSnap of uploadsSnap.docs) {
+                const up = upSnap.data();
                 const uploadId = upSnap.id;
-                try {
-                  const resultDoc = await getDoc(doc(db, 'results', uploadId));
-                  if (resultDoc.exists()) {
-                    const rd = { id: resultDoc.id, ...resultDoc.data() };
-                    rd.projectName = upSnap.data().originalName || rd.projectName || 'Project Analysis';
-                    resultsData.push(rd);
-                  }
-                } catch (e) {
-                  // ignore per-upload fetch errors
+                if (resultsMap.has(uploadId)) {
+                  // augment existing result entry with upload fields for display
+                  const existing = resultsMap.get(uploadId);
+                  existing.projectName = up.originalName || existing.projectName || 'Unnamed Project';
+                  existing.uploadedAt = existing.uploadedAt || up.uploadedAt || up.createdAt;
+                  existing.size = existing.size || up.size;
+                  existing.mimetype = existing.mimetype || up.mimetype || up.mimeType;
+                  existing.status = existing.status || up.status;
+                  existing.errorMessage = existing.errorMessage || up.errorMessage;
+                  resultsMap.set(uploadId, existing);
+                } else {
+                  // create a placeholder entry for uploads without results
+                  const placeholder = {
+                    id: uploadId,
+                    uploadId: uploadId,
+                    projectName: up.originalName || 'Unnamed Project',
+                    hasResult: false,
+                    status: up.status || 'not_scanned',
+                    errorMessage: up.errorMessage || '',
+                    uploadedAt: up.uploadedAt || up.createdAt || null,
+                    size: up.size || null,
+                    mimetype: up.mimetype || up.mimeType || 'ZIP Archive'
+                  };
+                  resultsMap.set(uploadId, placeholder);
                 }
               }
             } catch (e) {
-              console.warn('Fallback fetch of uploads failed:', e);
+              console.warn('Failed to load uploads for merging into results selector:', e);
             }
           }
 
+          // Convert map to an ordered array (keep the order from the realtime snapshot first, then remaining uploads)
+          const resultsData = Array.from(resultsMap.values()).sort((a, b) => {
+            const ta = a.analyzedAt || a.uploadedAt || 0;
+            const tb = b.analyzedAt || b.uploadedAt || 0;
+            return (tb || 0) - (ta || 0);
+          });
+
           setResults(resultsData);
           if (desiredProjectId) {
-            let matched = resultsData.find(r => r.uploadId === desiredProjectId || r.id === desiredProjectId) || null;
+            const matched = resultsData.find(r => r.uploadId === desiredProjectId || r.id === desiredProjectId) || null;
             setSelectedResult(matched || resultsData[0] || null);
           } else {
             setSelectedResult(resultsData[0] || null);
@@ -148,6 +162,34 @@ const ResultsPage = () => {
       try { if (unsubscribeAuth) unsubscribeAuth(); } catch(e) {}
     };
   }, [desiredProjectId]);
+
+  // If a selected result doesn't include embedded `data`, try to fetch the
+  // full report JSON from Cloud Storage using the `reportPath` field that the
+  // analyzer function uploads. This keeps Firestore small while still letting
+  // the UI show full charts on demand.
+  useEffect(() => {
+    if (!selectedResult) return;
+    if (selectedResult.data) return; // already have it
+    if (!selectedResult.reportPath) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const url = await getDownloadURL(storageRef(storage, selectedResult.reportPath));
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+        const json = await resp.json();
+        if (cancelled) return;
+        // attach the fetched data to selectedResult and results list
+        setSelectedResult(prev => prev ? { ...prev, data: json } : prev);
+        setResults(prev => prev.map(r => r.id === selectedResult.id ? { ...r, data: json } : r));
+      } catch (err) {
+        console.warn('Failed to load report from storage:', err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selectedResult]);
 
   const formatDate = (timestamp) => {
     if (!timestamp) return "Unknown date";
@@ -305,17 +347,32 @@ const ResultsPage = () => {
                       </div>
                     </div>
 
-                  {/* Render JSON or Charts view */}
-                  {showJsonRaw ? (
-                    <div className="json-view-section">
-                      <div className="json-view-content">
-                        <pre>{JSON.stringify(selectedResult, null, 2)}</pre>
-                      </div>
+                  {/* Render JSON or Charts view, or show a friendly message when no analysis exists */}
+                  {selectedResult.hasResult === false ? (
+                    <div className="empty-state">
+                      <div className="empty-icon">ℹ️</div>
+                      <h2>Project not analyzed</h2>
+                      <p>
+                        This project ({selectedResult.projectName}) has not been analyzed.
+                        Current status: <strong>{selectedResult.status || 'not_scanned'}</strong>.
+                      </p>
+                      {selectedResult.errorMessage && (
+                        <p className="error-text">Reason: {selectedResult.errorMessage}</p>
+                      )}
+                      <p>You can re-upload the project.</p>
                     </div>
                   ) : (
-                    <div id="charts-panel" className="json-view-section charts-area">
-                      <ChartsPanel analysis={(selectedResult && (selectedResult.data || selectedResult)) || {}} />
-                    </div>
+                    (showJsonRaw ? (
+                      <div className="json-view-section">
+                        <div className="json-view-content">
+                          <pre>{JSON.stringify(selectedResult, null, 2)}</pre>
+                        </div>
+                      </div>
+                    ) : (
+                      <div id="charts-panel" className="json-view-section charts-area">
+                        <ChartsPanel analysis={(selectedResult && (selectedResult.data || selectedResult)) || {}} />
+                      </div>
+                    ))
                   )}
                 </div>
               )}

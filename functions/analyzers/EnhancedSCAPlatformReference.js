@@ -3,6 +3,10 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+console.log('[analyzers] loaded: EnhancedSCAPlatformReference.js');
+console.log('🎯 analyzer loaded: analyzers/EnhancedSCAPlatformReference.js');
+console.log('🎯 analyzer loaded: analyzers/EnhancedSCAPlatformReference.js');
+
 let axios;
 try {
     axios = require('axios');
