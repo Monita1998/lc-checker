@@ -9,33 +9,31 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js (v20 required by Firebase)
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install root dependencies
+        run: npm install
 
-      - name: Build frontend
+      - name: Build frontend (React)
         run: npm run build
 
       - name: Install Firebase Tools
         run: npm install -g firebase-tools
 
-      - name: Deploy to Firebase (hosting + functions)
+      - name: Install Functions dependencies
+        run: |
+          cd functions
+          npm install
+
+      - name: Deploy to Firebase (Hosting + Functions)
         env:
           FIREBASE_PROJECT: ${{ secrets.FIREBASE_PROJECT }}
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
-          if [ -z "$FIREBASE_PROJECT" ]; then
-            echo "FIREBASE_PROJECT secret is not set. Aborting." && exit 1
-          fi
-          if [ -z "$FIREBASE_TOKEN" ]; then
-            echo "FIREBASE_TOKEN secret is not set. Aborting." && exit 1
-          fi
-          echo "Deploying to Firebase project: $FIREBASE_PROJECT"
           firebase deploy --project "$FIREBASE_PROJECT" --only hosting,functions --token "$FIREBASE_TOKEN"
