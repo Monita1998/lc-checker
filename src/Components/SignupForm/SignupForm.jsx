@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import "./SignupForm.css";
 import loginImage from "../Assets/boy-looking-at-screen.png";
-import googleLogo from "../Assets/google-color.svg";
 import { IoIosEye, IoIosEyeOff } from "react-icons/io";
 import { auth, db } from "../../firebase"; 
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
