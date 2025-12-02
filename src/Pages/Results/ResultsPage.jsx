@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from 'react-router-dom';
-import { collection, query, orderBy, limit, doc, getDoc, getDocs, deleteDoc, where, onSnapshot } from "firebase/firestore";
+import { collection, query, orderBy, limit, doc, getDoc, deleteDoc, where, onSnapshot } from "firebase/firestore";
 import { auth, db, storage } from "../../firebase";
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { onAuthStateChanged } from "firebase/auth";
@@ -208,6 +208,7 @@ const ResultsPage = () => {
       try { if (unsubscribeUploads) unsubscribeUploads(); } catch(e) {}
       try { if (unsubscribeAuth) unsubscribeAuth(); } catch(e) {}
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desiredProjectId]);
 
   // If a selected result doesn't include embedded `data`, try to fetch the
