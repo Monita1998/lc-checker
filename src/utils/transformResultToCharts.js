@@ -59,14 +59,40 @@ module.exports = function transformResultToCharts(analysis) {
   const custom = [];
 
   // --- Vulnerability Severity Distribution ---
-  // Prefer executiveSummary.severityBreakdown or securityOverview.severityBreakdown
-  const sevBreak = root.executiveSummary?.severityBreakdown || root.securityOverview?.severityBreakdown || {};
-  // normalize to CRITICAL,HIGH,MEDIUM,LOW order (uppercase)
+  // Gather severity counts from multiple possible locations.
+  // Priority order: explicit severityBreakdown -> securityVulnerabilities.summary -> derive from detailedVulnerabilities
+  let sevBreak = root.executiveSummary?.severityBreakdown || root.securityOverview?.severityBreakdown || {};
+  if (!sevBreak || Object.keys(sevBreak).length === 0) {
+    const summary = root.securityVulnerabilities?.summary || root.securityOverview?.summary || {};
+    const mapped = {};
+    ['critical', 'high', 'medium', 'moderate', 'low'].forEach(k => {
+      if (summary[k] != null) {
+        const upper = k === 'moderate' ? 'MEDIUM' : k.toUpperCase();
+        mapped[upper] = getNumber(summary[k]);
+      }
+    });
+    sevBreak = mapped;
+  }
+  // Fallback: compute from detailed vulnerabilities if present
+  const details = Array.isArray(root.securityOverview?.detailedVulnerabilities) ? root.securityOverview.detailedVulnerabilities : [];
+  if (details.length > 0) {
+    const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    details.forEach(v => {
+      const raw = (v.severity || '').toString().toUpperCase();
+      const norm = raw === 'MODERATE' ? 'MEDIUM' : raw;
+      if (norm === 'CRITICAL' || norm === 'HIGH' || norm === 'MEDIUM' || norm === 'LOW') {
+        counts[norm] += 1;
+      }
+    });
+    const sum = Object.values(counts).reduce((a, b) => a + b, 0);
+    if (sum > 0) sevBreak = counts;
+  }
+
   const vulnOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
   const vulnLabels = vulnOrder.filter(k => Object.prototype.hasOwnProperty.call(sevBreak, k));
   const vulnValues = vulnLabels.map(k => getNumber(sevBreak[k]));
   charts.vulnerabilitiesBySeverity = buildChartJsBar(vulnLabels, vulnValues);
-  custom.push(toCustomPayload('Security Vulnerabilities by Severity', 'doughnut', {
+  custom.push(toCustomPayload('Vulnerability Severity Distribution', 'doughnut', {
     labels: vulnLabels,
     values: vulnValues,
     colors: ['#dc2626', '#ea580c', '#d97706', '#16a34a']

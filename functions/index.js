@@ -217,34 +217,78 @@ exports.analyzeOnUpload = onDocumentUpdated({
         };
 
         // Check for unexpected files (anything other than the 3 mandatory files)
-        const allowedFiles = ['package.json', 'package-lock.json', 'yarn.lock', 'node_modules'];
+        // STRICT: Only allow package.json, package-lock.json (or yarn.lock), node_modules
+        const allowedFiles = [
+          'package.json',
+          'package-lock.json',
+          'yarn.lock',
+          'node_modules',
+        ];
         const unexpectedFiles = entries.filter((name) => !allowedFiles.includes(name));
 
         if (unexpectedFiles.length > 0) {
-          const msg = `Zip contains unexpected files/folders: ${unexpectedFiles.join(', ')}. ` +
-                      'For accurate analysis, upload only: package.json, package-lock.json, ' +
+          const msg = `Invalid ZIP: Contains unexpected files/folders: ` +
+                      `${unexpectedFiles.join(', ')}. ` +
+                      'Please upload ONLY: package.json, package-lock.json, ' +
                       'and node_modules folder.';
-          warnings.push({
-            type: 'UNEXPECTED_FILES',
-            severity: 'WARNING',
-            message: msg,
-            files: unexpectedFiles,
+          console.error('❌ UPLOAD REJECTED - Unexpected files:', unexpectedFiles);
+
+          // REJECT the upload - update Firestore with error status
+          await db.collection('results').doc(uploadId).set({
+            uploadId,
+            uid: afterData.uid,
+            projectName: fileName,
+            status: 'failed',
+            summary: 'Upload rejected: ZIP contains unexpected files',
+            validationWarnings: [{
+              type: 'INVALID_ZIP_STRUCTURE',
+              severity: 'CRITICAL',
+              message: msg,
+              files: unexpectedFiles,
+            }],
+            analyzedAt: FieldValue.serverTimestamp(),
           });
-          console.warn('⚠️ Unexpected files detected:', unexpectedFiles);
+
+          console.log('❌ Upload rejected due to invalid ZIP structure');
+          return; // Stop processing
         }
 
-        // Check for missing critical files and generate warnings
+        // Check for missing critical files and generate detailed warnings
+        // Analysis will proceed but with incomplete results
+        const missingFileImpacts = {
+          'package.json': [
+            'License information may be incomplete',
+            'Project metadata unavailable',
+            'Dependency list incomplete',
+          ],
+          'node_modules': [
+            'Detailed package analysis unavailable',
+            'License extraction limited',
+            'Vulnerability scanning incomplete',
+            'SBOM will only include dependencies from lock file',
+          ],
+          'package-lock.json': [
+            'Exact version tracking unavailable',
+            'Dependency tree may be incomplete',
+            'Some outdated package checks may be skipped',
+          ],
+        };
+
         Object.entries(requiredFiles).forEach(([fileName, fileInfo]) => {
           if (!fileInfo.exists) {
-            const msg = `Missing ${fileName}: ${fileInfo.description}. ` +
-                        'Analysis results may be incomplete or inaccurate.';
+            const impacts = missingFileImpacts[fileName] || [];
+            const impactList = impacts.length > 0 ?
+              ` Impact: ${impacts.join('; ')}.` : '';
+            const msg = `Missing ${fileName}: ${fileInfo.description}.${impactList}`;
             warnings.push({
               type: 'MISSING_FILE',
               severity: fileInfo.severity,
               message: msg,
               file: fileName,
+              impacts: impacts,
             });
-            console.warn(`⚠️ ${fileInfo.severity}: ${msg}`);
+            console.warn(`⚠️ ${fileInfo.severity}: Missing ${fileName}`);
+            console.warn(`   Impact: ${impacts.join('; ')}`);
           } else {
             console.log(`✅ Found ${fileName}`);
           }

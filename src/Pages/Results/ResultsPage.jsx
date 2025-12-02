@@ -20,15 +20,39 @@ const ResultsPage = () => {
 
   const location = useLocation();
   const desiredProjectId = location?.state?.projectId || null;
+  const lastSelectedId = (() => {
+    try { return localStorage.getItem('lc:lastSelectedResultId'); } catch { return null; }
+  })();
+
+  // Helper to choose a sensible default selection mirroring Projects page behavior
+  const chooseInitialSelection = (resultsData) => {
+    if (!Array.isArray(resultsData) || resultsData.length === 0) return null;
+    // Priority: navigation param -> last selected -> first with results -> first item
+    if (desiredProjectId) {
+      const byNav = resultsData.find(r => r.uploadId === desiredProjectId || r.id === desiredProjectId);
+      if (byNav) return byNav;
+    }
+    if (lastSelectedId) {
+      const byLast = resultsData.find(r => r.id === lastSelectedId || r.uploadId === lastSelectedId);
+      if (byLast) return byLast;
+    }
+    const withResult = resultsData.find(r => r.hasResult);
+    return withResult || resultsData[0];
+  };
 
   useEffect(() => {
     let unsubscribeSnapshot = null;
+    let unsubscribeUploads = null;
     let unsubscribeAuth = null;
 
     const attachListener = (user) => {
       if (unsubscribeSnapshot) {
         try { unsubscribeSnapshot(); } catch (e) { /* ignore */ }
         unsubscribeSnapshot = null;
+      }
+      if (unsubscribeUploads) {
+        try { unsubscribeUploads(); } catch (e) { /* ignore */ }
+        unsubscribeUploads = null;
       }
 
       let resultsQuery;
@@ -60,39 +84,64 @@ const ResultsPage = () => {
           // Always fetch the user's uploads and merge them so the selector shows ALL projects
           if (user && user.uid) {
             try {
-              const uploadsQ = query(collection(db, 'uploads'), where('uid', '==', user.uid), orderBy('uploadedAt', 'desc'), limit(200));
-              const uploadsSnap = await getDocs(uploadsQ);
-              for (const upSnap of uploadsSnap.docs) {
-                const up = upSnap.data();
-                const uploadId = upSnap.id;
-                if (resultsMap.has(uploadId)) {
-                  // augment existing result entry with upload fields for display
-                  const existing = resultsMap.get(uploadId);
-                  existing.projectName = up.originalName || existing.projectName || 'Unnamed Project';
-                  existing.uploadedAt = existing.uploadedAt || up.uploadedAt || up.createdAt;
-                  existing.size = existing.size || up.size;
-                  existing.mimetype = existing.mimetype || up.mimetype || up.mimeType;
-                  existing.status = existing.status || up.status;
-                  existing.errorMessage = existing.errorMessage || up.errorMessage;
-                  resultsMap.set(uploadId, existing);
-                } else {
-                  // create a placeholder entry for uploads without results
-                  const placeholder = {
-                    id: uploadId,
-                    uploadId: uploadId,
-                    projectName: up.originalName || 'Unnamed Project',
-                    hasResult: false,
-                    status: up.status || 'not_scanned',
-                    errorMessage: up.errorMessage || '',
-                    uploadedAt: up.uploadedAt || up.createdAt || null,
-                    size: up.size || null,
-                    mimetype: up.mimetype || up.mimeType || 'ZIP Archive'
-                  };
-                  resultsMap.set(uploadId, placeholder);
+              const uploadsQ = query(
+                collection(db, 'uploads'),
+                where('uid', '==', user.uid),
+                orderBy('uploadedAt', 'desc')
+              );
+              // Live sync uploads so dropdown matches Projects tab in real time
+              unsubscribeUploads = onSnapshot(uploadsQ, (uploadsSnap) => {
+                try {
+                  const localMap = new Map(resultsMap);
+                  for (const upSnap of uploadsSnap.docs) {
+                    const up = upSnap.data();
+                    const uploadId = upSnap.id;
+                    if (localMap.has(uploadId)) {
+                      const existing = localMap.get(uploadId);
+                      existing.projectName = up.originalName || existing.projectName || 'Unnamed Project';
+                      existing.uploadedAt = existing.uploadedAt || up.uploadedAt || up.createdAt;
+                      existing.size = existing.size || up.size;
+                      existing.mimetype = existing.mimetype || up.mimetype || up.mimeType;
+                      existing.status = existing.status || up.status;
+                      existing.errorMessage = existing.errorMessage || up.errorMessage;
+                      localMap.set(uploadId, existing);
+                    } else {
+                      const placeholder = {
+                        id: uploadId,
+                        uploadId: uploadId,
+                        projectName: up.originalName || 'Unnamed Project',
+                        hasResult: false,
+                        status: up.status || 'not_scanned',
+                        errorMessage: up.errorMessage || '',
+                        uploadedAt: up.uploadedAt || up.createdAt || null,
+                        size: up.size || null,
+                        mimetype: up.mimetype || up.mimeType || 'ZIP Archive'
+                      };
+                      localMap.set(uploadId, placeholder);
+                    }
+                  }
+
+                  const resultsData = Array.from(localMap.values()).sort((a, b) => {
+                    const ta = a.analyzedAt || a.uploadedAt || 0;
+                    const tb = b.analyzedAt || b.uploadedAt || 0;
+                    return (tb || 0) - (ta || 0);
+                  });
+
+                  setResults(resultsData);
+                  // If nothing is selected yet or selection no longer exists, choose one
+                  setSelectedResult(prevSel => {
+                    if (!prevSel) return chooseInitialSelection(resultsData);
+                    const stillExists = resultsData.find(r => r.id === prevSel.id);
+                    return stillExists ? prevSel : chooseInitialSelection(resultsData);
+                  });
+                } catch (mergeErr) {
+                  console.warn('Failed merging uploads into results selector:', mergeErr);
                 }
-              }
+              }, (err) => {
+                console.error('Realtime uploads listener error:', err);
+              });
             } catch (e) {
-              console.warn('Failed to load uploads for merging into results selector:', e);
+              console.warn('Failed to attach uploads listener:', e);
             }
           }
 
@@ -104,12 +153,9 @@ const ResultsPage = () => {
           });
 
           setResults(resultsData);
-          if (desiredProjectId) {
-            const matched = resultsData.find(r => r.uploadId === desiredProjectId || r.id === desiredProjectId) || null;
-            setSelectedResult(matched || resultsData[0] || null);
-          } else {
-            setSelectedResult(resultsData[0] || null);
-          }
+          // Determine default selection priority: navigation param > last selected > first with result > first item
+          const initial = chooseInitialSelection(resultsData);
+          setSelectedResult(initial);
         } catch (err) {
           console.error('Error handling snapshot:', err);
         } finally {
@@ -159,6 +205,7 @@ const ResultsPage = () => {
 
     return () => {
       try { if (unsubscribeSnapshot) unsubscribeSnapshot(); } catch(e) {}
+      try { if (unsubscribeUploads) unsubscribeUploads(); } catch(e) {}
       try { if (unsubscribeAuth) unsubscribeAuth(); } catch(e) {}
     };
   }, [desiredProjectId]);
@@ -283,6 +330,7 @@ const ResultsPage = () => {
                 onChange={(e) => {
                   const sel = results.find(r => r.id === e.target.value);
                   setSelectedResult(sel || null);
+                  try { if (sel?.id) localStorage.setItem('lc:lastSelectedResultId', sel.id); } catch {}
                   try {
                     // scroll charts into view for better UX
                     const el = document.getElementById('charts-panel');

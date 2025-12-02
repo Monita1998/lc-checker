@@ -6,6 +6,7 @@ import { auth, storage, db } from "../../firebase";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import "./upload.css";
+import JSZip from "jszip";
 
 const Upload = () => {
   const navigate = useNavigate();
@@ -25,7 +26,76 @@ const Upload = () => {
     }
 
     if (zipFiles.length > 0) {
-      await uploadFilesToFirebase(zipFiles);
+      // Validate each ZIP strictly before uploading
+      const validationResults = await Promise.all(zipFiles.map(validateZipStrict));
+      const validFiles = [];
+      validationResults.forEach((result, idx) => {
+        if (result.valid) {
+          validFiles.push(zipFiles[idx]);
+        } else {
+          // Show all reasons why invalid
+          const prefix = `${zipFiles[idx].name} is invalid:`;
+          toast.error([prefix, ...result.reasons].join("\n"), { autoClose: 7000 });
+        }
+      });
+
+      if (validFiles.length === 0) {
+        toast.warning("No valid ZIP files to upload. Please fix and retry.");
+        return;
+      }
+
+      await uploadFilesToFirebase(validFiles);
+    }
+  };
+
+  // Strict validator: ZIP must contain ONLY root-level node_modules/, package.json, package-lock.json
+  // and no other top-level files or folders. node_modules can contain arbitrary contents.
+  const validateZipStrict = async (file) => {
+    const reasons = [];
+    try {
+      // Use ArrayBuffer for broader browser compatibility and performance
+      const buf = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(buf);
+
+      const topLevelNames = new Set();
+      let hasNodeModules = false;
+      let hasPackageJson = false;
+      let hasPackageLock = false;
+
+      zip.forEach((relPath, entry) => {
+        // Normalize and extract top-level folder/file name
+        const norm = relPath.replace(/^\.\/?/, '');
+        const parts = norm.split('/');
+        const top = parts[0];
+        if (top) topLevelNames.add(top);
+        if (norm.startsWith('node_modules/')) hasNodeModules = true;
+        if (norm === 'package.json') hasPackageJson = true;
+        if (norm === 'package-lock.json') hasPackageLock = true;
+      });
+
+      // Required presence
+      if (!hasNodeModules) reasons.push("Missing top-level 'node_modules/' directory.");
+      if (!hasPackageJson) reasons.push("Missing top-level 'package.json'.");
+      if (!hasPackageLock) reasons.push("Missing top-level 'package-lock.json'.");
+
+      // Strict top-level allowlist
+      const allowedTop = new Set(['node_modules', 'package.json', 'package-lock.json']);
+      const extras = Array.from(topLevelNames).filter(name => !allowedTop.has(name));
+      if (extras.length > 0) {
+        reasons.push(`Contains disallowed top-level entries: ${extras.join(', ')}`);
+      }
+
+      // Special case: macOS artifacts and hidden files at root are not allowed
+      const macosArtifacts = Array.from(topLevelNames).filter(name => name === '__MACOSX' || name === '.DS_Store');
+      if (macosArtifacts.length > 0) {
+        reasons.push(`Remove macOS artifacts: ${macosArtifacts.join(', ')}`);
+      }
+
+      // Valid only if no reasons
+      return { valid: reasons.length === 0, reasons };
+    } catch (e) {
+      reasons.push('Failed to read ZIP file. Ensure it is not corrupted.');
+      return { valid: false, reasons };
     }
   };
 

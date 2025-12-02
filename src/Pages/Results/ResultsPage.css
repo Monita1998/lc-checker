@@ -8,8 +8,10 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  overflow-x: visible;
+  overflow-x: hidden; /* prevent horizontal scroll */
   overflow-y: visible; /* allow the page to scroll instead of internal clipping */
+  max-width: 100%; /* ensure it doesn't exceed viewport */
+  box-sizing: border-box;
 }
 
 /* Ensure the Results page can scroll even if other pages globally hide body scrolling
@@ -166,8 +168,10 @@ html, body, #root {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1.5rem; /* gap-6 equivalent */
-  grid-auto-rows: 1fr; /* make rows equal height so cards in a row match */
-  align-items: stretch; /* stretch cards to fill grid row */
+  grid-auto-rows: auto; /* let cards size themselves naturally */
+  align-items: start; /* align cards to top instead of stretching */
+  max-width: 100%;
+  overflow-x: hidden; /* prevent horizontal scroll */
 }
 
 @media (min-width: 768px) {
@@ -179,13 +183,101 @@ html, body, #root {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 12px;
+  padding: 16px;
   min-height: 200px;
   position: relative;
-  overflow: visible; /* allow chart overlays (gauge center) to render correctly */
+  overflow: hidden; /* prevent content from overflowing card boundaries */
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.chart-card table {
+  table-layout: fixed; /* prevent table from expanding beyond container */
+  width: 100%;
+  word-wrap: break-word;
+}
+
+.chart-card tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Outdated packages card */
+.outdated-card,
+.supplychain-card {
+  min-height: auto;
+}
+
+.outdated-card {
+  max-height: none;
+}
+
+.supplychain-card {
+  max-height: none;
+}
+
+.outdated-card h4,
+.supplychain-card h4 {
+  margin: 16px 0 8px 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.outdated-card table,
+.supplychain-card table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.outdated-card table thead th,
+.supplychain-card table thead th {
+  background-color: #f8fafc;
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.outdated-card table tbody td,
+.supplychain-card table tbody td {
+  padding: 8px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+
+.outdated-card table tbody tr:hover,
+.supplychain-card table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.outdated-card ul,
+.supplychain-card ul {
+  margin: 8px 0;
+  padding-left: 24px;
+  list-style-position: outside;
+}
+
+.outdated-card ul li,
+.supplychain-card ul li {
+  margin-bottom: 6px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.outdated-card code,
+.supplychain-card code {
+  background-color: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #0f172a;
+  font-family: 'Monaco', 'Courier New', monospace;
 }
 
 /* Styles for the license quality list (left numeric score, right label) */
@@ -193,8 +285,23 @@ html, body, #root {
 .quality-item { display:flex; justify-content:space-between; align-items:center; }
 .quality-label { color: #374151; font-size: 0.95rem; }
 .quality-score { font-size: 20px; font-weight: 700; color: #0f172a; min-width:56px; text-align:right; }
-.chart-title { margin: 0 0 8px 0; font-size: 1.05rem; }
-.legend { color: #374151; margin-bottom: 8px; }
+.chart-title { 
+  margin: 0 0 12px 0; 
+  font-size: 1.05rem; 
+  font-weight: 600;
+  color: #0f172a;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 10px;
+}
+.legend { 
+  color: #64748b; 
+  font-size: 0.9rem;
+  margin: 12px 0;
+  padding: 8px;
+  background-color: #f8fafc;
+  border-radius: 4px;
+  text-align: center;
+}
 .stat-row { display:flex; justify-content:space-between; margin-top:6px; font-size:0.95rem; }
 .bar-bg { width:100%; height:12px; background:#eef2f7; border-radius:6px; margin:6px 0 10px 0; overflow:hidden; }
 .bar-bg.small { height:10px; }
