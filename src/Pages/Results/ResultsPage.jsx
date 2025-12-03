@@ -46,8 +46,8 @@ const ResultsPage = () => {
           const initial = chooseInitialSelection(cachedResults);
           if (initial) {
             setSelectedResult(initial);
+            setLoading(false); // Show cached data immediately
           }
-          // Don't set loading to false here - let the listener do it
         } else {
           console.log('⏱️ Cache expired, will fetch fresh data');
           localStorage.removeItem(CACHE_KEY);
@@ -57,6 +57,7 @@ const ResultsPage = () => {
     } catch (error) {
       console.warn('Failed to load cache:', error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Save results to cache whenever they update
@@ -357,6 +358,7 @@ const ResultsPage = () => {
     })();
 
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedResult?.id, selectedResult?.reportPath]);
 
   const formatDate = (timestamp) => {
