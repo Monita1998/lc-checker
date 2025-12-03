@@ -152,7 +152,10 @@ module.exports = function transformResultToCharts(analysis) {
     totalVulnerabilities: getNumber(root.executiveSummary?.totalVulnerabilities || root.securityOverview?.vulnerabilities || root.executiveSummary?.vulnerabilities),
     outdatedPackages: getNumber(root.outdatedDependencies?.totalOutdated || outdated.length),
     licenseQualityScore: getNumber(root.licenseAnalytics?.licenseQualityScore || root.licenseAnalytics?.licenseQuality || root.licenseQualityScore),
-    overallRiskScore: getNumber(root.executiveSummary?.overallRiskScore || root.supplyChainRisk?.overallRiskScore || root.overallRiskScore)
+    overallRiskScore: getNumber(root.executiveSummary?.overallRiskScore || root.supplyChainRisk?.overallRiskScore || root.overallRiskScore),
+    complianceStatus: root.licenseCompatibility?.complianceStatus || root.reports?.executiveSummary?.summaryMetrics?.complianceStatus || root.executiveSummary?.complianceStatus,
+    projectHealth: root.reports?.executiveSummary?.projectHealth || root.executiveSummary?.projectHealth,
+    projectLicense: root.licenseCompatibility?.projectLicense || root.projectLicense || root.licenseAnalytics?.projectLicense || root.sbom?.packages?.[0]?.licenseDeclared
   };
 
   // Mirror some of the older chart keys for backward compatibility

@@ -24,6 +24,52 @@ const ResultsPage = () => {
     try { return localStorage.getItem('lc:lastSelectedResultId'); } catch { return null; }
   })();
 
+  // Cache key for storing results in localStorage
+  const CACHE_KEY = 'lc:resultsCache';
+  const CACHE_EXPIRY_KEY = 'lc:resultsCacheExpiry';
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  // Load cached results on mount for instant display
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const expiry = localStorage.getItem(CACHE_EXPIRY_KEY);
+      
+      if (cached && expiry) {
+        const expiryTime = parseInt(expiry, 10);
+        if (Date.now() < expiryTime) {
+          const cachedResults = JSON.parse(cached);
+          console.log('📦 Loaded cached results:', cachedResults.length);
+          setResults(cachedResults);
+          
+          // Set initial selection from cache
+          const initial = chooseInitialSelection(cachedResults);
+          if (initial) {
+            setSelectedResult(initial);
+          }
+          // Don't set loading to false here - let the listener do it
+        } else {
+          console.log('⏱️ Cache expired, will fetch fresh data');
+          localStorage.removeItem(CACHE_KEY);
+          localStorage.removeItem(CACHE_EXPIRY_KEY);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load cache:', error);
+    }
+  }, []);
+
+  // Save results to cache whenever they update
+  const saveToCache = (resultsData) => {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(resultsData));
+      localStorage.setItem(CACHE_EXPIRY_KEY, (Date.now() + CACHE_DURATION).toString());
+      console.log('💾 Cached', resultsData.length, 'results');
+    } catch (error) {
+      console.warn('Failed to save cache:', error);
+    }
+  };
+
   // Helper to choose a sensible default selection mirroring Projects page behavior
   const chooseInitialSelection = (resultsData) => {
     if (!Array.isArray(resultsData) || resultsData.length === 0) return null;
@@ -70,15 +116,17 @@ const ResultsPage = () => {
         );
       }
 
+      // Store results data in a ref-like pattern to share across listeners
+      let currentResultsMap = new Map();
+
       unsubscribeSnapshot = onSnapshot(resultsQuery, async (snapshot) => {
         try {
           // Build a map of results keyed by uploadId (or id)
-          const resultsMap = new Map();
+          currentResultsMap = new Map();
           for (const docSnap of snapshot.docs) {
             const resultData = { id: docSnap.id, ...docSnap.data() };
             const key = resultData.uploadId || resultData.id;
-            // ensure we have a projectName (prefer upload originalName when available)
-            resultsMap.set(key, { ...resultData, hasResult: true });
+            currentResultsMap.set(key, { ...resultData, hasResult: true });
           }
 
           // Always fetch the user's uploads and merge them so the selector shows ALL projects
@@ -89,76 +137,122 @@ const ResultsPage = () => {
                 where('uid', '==', user.uid),
                 orderBy('uploadedAt', 'desc')
               );
+              
               // Live sync uploads so dropdown matches Projects tab in real time
               unsubscribeUploads = onSnapshot(uploadsQ, (uploadsSnap) => {
                 try {
-                  const localMap = new Map(resultsMap);
-                  for (const upSnap of uploadsSnap.docs) {
-                    const up = upSnap.data();
-                    const uploadId = upSnap.id;
-                    if (localMap.has(uploadId)) {
-                      const existing = localMap.get(uploadId);
-                      existing.projectName = up.originalName || existing.projectName || 'Unnamed Project';
-                      existing.uploadedAt = existing.uploadedAt || up.uploadedAt || up.createdAt;
-                      existing.size = existing.size || up.size;
-                      existing.mimetype = existing.mimetype || up.mimetype || up.mimeType;
-                      existing.status = existing.status || up.status;
-                      existing.errorMessage = existing.errorMessage || up.errorMessage;
-                      localMap.set(uploadId, existing);
-                    } else {
-                      const placeholder = {
-                        id: uploadId,
-                        uploadId: uploadId,
-                        projectName: up.originalName || 'Unnamed Project',
-                        hasResult: false,
-                        status: up.status || 'not_scanned',
-                        errorMessage: up.errorMessage || '',
-                        uploadedAt: up.uploadedAt || up.createdAt || null,
-                        size: up.size || null,
-                        mimetype: up.mimetype || up.mimeType || 'ZIP Archive'
-                      };
-                      localMap.set(uploadId, placeholder);
+                  // Create a fresh map from current results
+                  const mergedMap = new Map(currentResultsMap);
+                  
+                  // Preserve existing data field from previous results state
+                  setResults(prevResults => {
+                    // Add/update with upload data
+                    for (const upSnap of uploadsSnap.docs) {
+                      const up = upSnap.data();
+                      const uploadId = upSnap.id;
+                      
+                      // Find previous version to preserve loaded data
+                      const prevItem = prevResults.find(r => r.id === uploadId || r.uploadId === uploadId);
+                      
+                      if (mergedMap.has(uploadId)) {
+                        // Update existing result with upload metadata
+                        const existing = mergedMap.get(uploadId);
+                        mergedMap.set(uploadId, {
+                          ...existing,
+                          projectName: up.originalName || existing.projectName || 'Unnamed Project',
+                          uploadedAt: existing.uploadedAt || up.uploadedAt || up.createdAt,
+                          size: existing.size || up.size,
+                          mimetype: existing.mimetype || up.mimetype || up.mimeType,
+                          status: existing.status || up.status,
+                          errorMessage: existing.errorMessage || up.errorMessage,
+                          data: prevItem?.data || existing.data // Preserve loaded data
+                        });
+                      } else {
+                        // Add upload without analysis result
+                        mergedMap.set(uploadId, {
+                          id: uploadId,
+                          uploadId: uploadId,
+                          projectName: up.originalName || 'Unnamed Project',
+                          hasResult: false,
+                          status: up.status || 'not_scanned',
+                          errorMessage: up.errorMessage || '',
+                          uploadedAt: up.uploadedAt || up.createdAt || null,
+                          size: up.size || null,
+                          mimetype: up.mimetype || up.mimeType || 'ZIP Archive',
+                          data: prevItem?.data // Preserve loaded data if exists
+                        });
+                      }
                     }
-                  }
 
-                  const resultsData = Array.from(localMap.values()).sort((a, b) => {
-                    const ta = a.analyzedAt || a.uploadedAt || 0;
-                    const tb = b.analyzedAt || b.uploadedAt || 0;
-                    return (tb || 0) - (ta || 0);
-                  });
+                    // Sort by most recent first
+                    const resultsData = Array.from(mergedMap.values()).sort((a, b) => {
+                      const ta = a.analyzedAt || a.uploadedAt || 0;
+                      const tb = b.analyzedAt || b.uploadedAt || 0;
+                      return (tb?.seconds || tb || 0) - (ta?.seconds || ta || 0);
+                    });
 
-                  setResults(resultsData);
-                  // If nothing is selected yet or selection no longer exists, choose one
-                  setSelectedResult(prevSel => {
-                    if (!prevSel) return chooseInitialSelection(resultsData);
-                    const stillExists = resultsData.find(r => r.id === prevSel.id);
-                    return stillExists ? prevSel : chooseInitialSelection(resultsData);
+                    saveToCache(resultsData); // Cache the merged results
+                    
+                    // Update selection intelligently - preserve existing data if available
+                    setSelectedResult(prevSel => {
+                      if (!prevSel) return chooseInitialSelection(resultsData);
+                      // Find the updated version of the current selection
+                      const updated = resultsData.find(r => r.id === prevSel.id || r.uploadId === prevSel.uploadId);
+                      if (updated) {
+                        // Preserve the 'data' field if it was already loaded
+                        return prevSel.data ? { ...updated, data: prevSel.data } : updated;
+                      }
+                      return chooseInitialSelection(resultsData);
+                    });
+                    
+                    return resultsData;
                   });
+                  
+                  setLoading(false);
                 } catch (mergeErr) {
                   console.warn('Failed merging uploads into results selector:', mergeErr);
+                  setLoading(false);
                 }
               }, (err) => {
                 console.error('Realtime uploads listener error:', err);
+                setLoading(false);
               });
             } catch (e) {
               console.warn('Failed to attach uploads listener:', e);
+              setLoading(false);
             }
+          } else {
+            // No user logged in - just show results
+            setResults(prevResults => {
+              const resultsData = Array.from(currentResultsMap.values()).map(item => {
+                // Preserve loaded data from previous state
+                const prevItem = prevResults.find(r => r.id === item.id);
+                return prevItem?.data ? { ...item, data: prevItem.data } : item;
+              }).sort((a, b) => {
+                const ta = a.analyzedAt || a.uploadedAt || 0;
+                const tb = b.analyzedAt || b.uploadedAt || 0;
+                return (tb?.seconds || tb || 0) - (ta?.seconds || ta || 0);
+              });
+
+              saveToCache(resultsData); // Cache results for non-logged-in users too
+              
+              // Update selection intelligently - preserve existing data if available
+              setSelectedResult(prevSel => {
+                if (!prevSel) return chooseInitialSelection(resultsData);
+                const updated = resultsData.find(r => r.id === prevSel.id || r.uploadId === prevSel.uploadId);
+                if (updated) {
+                  return prevSel.data ? { ...updated, data: prevSel.data } : updated;
+                }
+                return chooseInitialSelection(resultsData);
+              });
+              
+              return resultsData;
+            });
+            
+            setLoading(false);
           }
-
-          // Convert map to an ordered array (keep the order from the realtime snapshot first, then remaining uploads)
-          const resultsData = Array.from(resultsMap.values()).sort((a, b) => {
-            const ta = a.analyzedAt || a.uploadedAt || 0;
-            const tb = b.analyzedAt || b.uploadedAt || 0;
-            return (tb || 0) - (ta || 0);
-          });
-
-          setResults(resultsData);
-          // Determine default selection priority: navigation param > last selected > first with result > first item
-          const initial = chooseInitialSelection(resultsData);
-          setSelectedResult(initial);
         } catch (err) {
           console.error('Error handling snapshot:', err);
-        } finally {
           setLoading(false);
         }
       }, (err) => {
@@ -215,11 +309,28 @@ const ResultsPage = () => {
   // full report JSON from Cloud Storage using the `reportPath` field that the
   // analyzer function uploads. This keeps Firestore small while still letting
   // the UI show full charts on demand.
+  // Now with caching to avoid repeated downloads.
   useEffect(() => {
     if (!selectedResult) return;
     if (selectedResult.data) return; // already have it
     if (!selectedResult.reportPath) return;
 
+    // Check cache first
+    const reportCacheKey = `lc:report:${selectedResult.id}`;
+    try {
+      const cached = localStorage.getItem(reportCacheKey);
+      if (cached) {
+        const cachedData = JSON.parse(cached);
+        console.log('📦 Loaded cached report for:', selectedResult.id);
+        setSelectedResult(prev => prev ? { ...prev, data: cachedData } : prev);
+        setResults(prev => prev.map(r => r.id === selectedResult.id ? { ...r, data: cachedData } : r));
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to load cached report:', err);
+    }
+
+    // Fetch from storage if not cached
     let cancelled = false;
     (async () => {
       try {
@@ -228,6 +339,15 @@ const ResultsPage = () => {
         if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
         const json = await resp.json();
         if (cancelled) return;
+        
+        // Cache the report data
+        try {
+          localStorage.setItem(reportCacheKey, JSON.stringify(json));
+          console.log('💾 Cached report for:', selectedResult.id);
+        } catch (cacheErr) {
+          console.warn('Failed to cache report (might be too large):', cacheErr);
+        }
+        
         // attach the fetched data to selectedResult and results list
         setSelectedResult(prev => prev ? { ...prev, data: json } : prev);
         setResults(prev => prev.map(r => r.id === selectedResult.id ? { ...r, data: json } : r));
@@ -237,7 +357,7 @@ const ResultsPage = () => {
     })();
 
     return () => { cancelled = true; };
-  }, [selectedResult]);
+  }, [selectedResult?.id, selectedResult?.reportPath]);
 
   const formatDate = (timestamp) => {
     if (!timestamp) return "Unknown date";
@@ -270,6 +390,7 @@ const ResultsPage = () => {
       // Update local state
       const updatedResults = results.filter(r => r.id !== resultToDelete.id);
       setResults(updatedResults);
+      saveToCache(updatedResults); // Update cache after deletion
       
       // Update selected result if needed
       if (selectedResult && selectedResult.id === resultToDelete.id) {
@@ -419,7 +540,7 @@ const ResultsPage = () => {
                       </div>
                     ) : (
                       <div id="charts-panel" className="json-view-section charts-area">
-                        <ChartsPanel analysis={(selectedResult && (selectedResult.data || selectedResult)) || {}} />
+                        <ChartsPanel analysis={(selectedResult && (selectedResult.data || selectedResult)) || {}} projectName={selectedResult?.projectName} />
                       </div>
                     ))
                   )}

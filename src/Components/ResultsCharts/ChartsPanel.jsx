@@ -15,7 +15,7 @@ import html2canvas from 'html2canvas';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
-const ChartsPanel = ({ analysis }) => {
+const ChartsPanel = ({ analysis, projectName }) => {
   const chartsPanelRef = useRef(null);
   const { charts, customCharts, overallMetrics } = transformResultToCharts(analysis || {});
 
@@ -41,6 +41,14 @@ const ChartsPanel = ({ analysis }) => {
   const vulnSeverityChart = customCharts?.find(c => c.title === 'Vulnerability Severity Distribution');
   const outdatedBreakdownChart = customCharts?.find(c => c.title === 'Outdated Packages Breakdown');
   const scrChart = customCharts?.find(c => c.title === 'Supply Chain Risk Factors');
+
+  // Check if all required files were present in the uploaded zip
+  const projectFiles = root.researchInsights?.projectFiles || root.projectFiles || {};
+  const missingFiles = [];
+  if (projectFiles.packageJson === false) missingFiles.push('package.json');
+  if (projectFiles.packageLock === false && projectFiles.yarnLock === false) missingFiles.push('package-lock.json');
+  if (projectFiles.nodeModules === false) missingFiles.push('node_modules/');
+  const hasAllFiles = missingFiles.length === 0;
 
   const handleDownloadPDF = async () => {
     if (!chartsPanelRef.current) return;
@@ -107,7 +115,10 @@ const ChartsPanel = ({ analysis }) => {
 
       // Download the PDF
       const timestamp = new Date().toISOString().split('T')[0];
-      pdf.save(`analysis-report-${timestamp}.pdf`);
+      const fileName = projectName 
+        ? `${projectName.replace(/[^a-z0-9]/gi, '_')}_analysis_${timestamp}.pdf`
+        : `analysis-report-${timestamp}.pdf`;
+      pdf.save(fileName);
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF. Please try again.');
@@ -128,6 +139,38 @@ const ChartsPanel = ({ analysis }) => {
 
   return (
     <div>
+      {/* Missing Files Warning */}
+      {!hasAllFiles && (
+        <div style={{
+          backgroundColor: '#fef3c7',
+          border: '1px solid #f59e0b',
+          borderRadius: '6px',
+          padding: '12px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'start',
+          gap: '12px'
+        }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" style={{ flexShrink: 0, marginTop: '2px' }}>
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div>
+            <div style={{ fontWeight: 600, color: '#92400e', marginBottom: '4px' }}>
+              ⚠️ Incomplete Analysis - Missing Required Files
+            </div>
+            <div style={{ fontSize: '14px', color: '#78350f' }}>
+              Some results may not be accurate as the uploaded ZIP file did not contain all expected files.
+              Missing: <strong>{missingFiles.join(', ')}</strong>
+            </div>
+            <div style={{ fontSize: '13px', color: '#78350f', marginTop: '6px' }}>
+              For complete analysis, please ensure your ZIP includes: <code>package.json</code>, <code>package-lock.json</code>, and <code>node_modules/</code> folder.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PDF Download Button */}
       <div style={{ 
         display: 'flex', 
@@ -216,15 +259,27 @@ const ChartsPanel = ({ analysis }) => {
                 <div><strong>{supply.riskLevel}</strong></div>
               </div>
             )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div>Compliance Status</div>
+              <div><strong>{overallMetrics.complianceStatus ?? 'NA'}</strong></div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div>Project Health</div>
+              <div><strong>{overallMetrics.projectHealth ?? 'NA'}</strong></div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div>Project License</div>
+              <div><strong>{overallMetrics.projectLicense ?? 'NA'}</strong></div>
+            </div>
           </div>
         ) : <div className="legend">No overall metrics available</div>}
       </div>
 
       {/* 2. Supply Chain Risk Factors (move to top row next to Overall Metrics) */}
       {scrChart && scrChart.data?.values?.some(v => v > 0) ? (
-        <div className="chart-card" style={{ minHeight: '250px', maxHeight: '420px' }}>
+        <div className="chart-card" style={{ minHeight: '300px', maxHeight: '420px' }}>
           <h3 className="chart-title">Supply Chain Risk Factors</h3>
-          <div style={{ height: 210, position: 'relative', padding: '8px 0' }}>
+          <div style={{ height: 300, position: 'relative', padding: '8px 0' }}>
             <Bar 
               data={{ 
                 labels: scrChart.data.labels, 
@@ -261,7 +316,7 @@ const ChartsPanel = ({ analysis }) => {
       ) : (
         <div className="chart-card" style={{ minHeight: '250px', maxHeight: '420px' }}>
           <h3 className="chart-title">Supply Chain Risk Factors</h3>
-          <div style={{ height: 210, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+          <div style={{ height: 285, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
             <p>No supply chain risk data available</p>
           </div>
         </div>

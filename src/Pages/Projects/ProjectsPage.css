@@ -1,27 +1,33 @@
 /* --- Layout Container --- */
 .project-container {
   display: flex;
+  min-height: auto;
   width: 100%;
-  height: 100vh; /* match HomePage full viewport layout */
   background-color: #ffffff;
 }
 
-/* Sidebar as normal column (match Home page) */
-.sidebar {
-  width: 20%;
-  background-color: #0f172a;
-  color: white;
+/* Fixed sidebar - matches Results page */
+.project-container .sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 240px;
+  background-color: inherit;
+  overflow-y: auto;
+  z-index: 50;
 }
 
-/* Main Content matches Home page layout */
-.main-content {
-  width: 80%;
+/* Main Content with space for fixed sidebar */
+.project-container .main-content {
+  margin-left: 240px;
+  width: calc(100% - 240px);
   background-color: #ffffff;
   display: flex;
   flex-direction: column;
-  justify-content: space-between; /* keep footer at bottom like HomePage */
-  box-sizing: border-box;
+  justify-content: flex-start;
   padding: 20px;
+  box-sizing: border-box;
 }
 
 /* --- Projects Content --- */

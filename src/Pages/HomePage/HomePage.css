@@ -1,23 +1,29 @@
 .home-container {
   display: flex;
-  height: 100vh; /* Full viewport height */
+  min-height: auto;
   width: 100%;
 }
 
-/* Sidebar styling - 20% */
-.sidebar {
-  width: 20%;
-  background-color: #0f172a;
-  color: white;
+/* Fixed sidebar - matches Results page */
+.home-container .sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 240px;
+  background-color: inherit;
+  overflow-y: auto;
+  z-index: 50;
 }
 
-/* Main content - 80% */
-.main-content {
-  width: 80%;
+/* Main content with space for fixed sidebar */
+.home-container .main-content {
+  margin-left: 240px;
+  width: calc(100% - 240px);
   background-color: #ffffff;
   display: flex;
   flex-direction: column;
-  justify-content: space-between; /* Keeps footer at bottom */
+  justify-content: flex-start;
   padding: 20px;
   box-sizing: border-box;
 }
